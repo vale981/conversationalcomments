@@ -11,6 +11,7 @@ on:
     branches:
       - main
       - master
+  workflow_dispatch: # Enable manual triggering
 
 permissions:
   contents: write
@@ -46,7 +47,7 @@ jobs:
   release:
     name: Create GitHub Release
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref_name == 'main' || github.ref_name == 'master' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -62,6 +63,10 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'nightly' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Nightly Development Build' }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          make_latest: ${{ startsWith(github.ref, 'refs/tags/v') && 'true' || 'false' }}
           files: |
             dist/conversationalcomments.zip
             dist/conversationalcomments-doc.pdf
