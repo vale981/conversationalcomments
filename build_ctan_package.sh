@@ -26,6 +26,7 @@ makeindex -s gglo.ist -o conversationalcomments-doc.gls conversationalcomments-d
 # 4. Multi-pass pdflatex with jobname to resolve references, citations, index, and change log
 pdflatex -jobname=conversationalcomments-doc -interaction=nonstopmode conversationalcomments.dtx
 pdflatex -jobname=conversationalcomments-doc -interaction=nonstopmode conversationalcomments.dtx
+pdflatex -jobname=conversationalcomments-doc -interaction=nonstopmode conversationalcomments.dtx
 
 echo "=== [2/3] Preparing CTAN-Compliant Layout ==="
 BUILD_DIR="ctan_build"

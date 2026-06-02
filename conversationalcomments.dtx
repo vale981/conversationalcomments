@@ -46,6 +46,8 @@
 %
 % \changes{v1.0.0}{2026/06/01}{Initial documented release}
 % \changes{v1.0.1}{2026/06/02}{Position comment boxes closer to the beginning of referenced text}
+% \changes{v1.0.1}{2026/06/02}{Implement elastic overlap prevention with 1D spring-directed relaxation solver and absolute zref-savepos coordinate tracking}
+% \changes{v1.0.1}{2026/06/02}{Isolate first-reply boolean state and add ignorespaces to eliminate superfluous spacing and vertical padding inside comment boxes}
 %
 % \GetFileInfo{conversationalcomments.dtx}
 %
@@ -171,6 +173,7 @@
 \RequirePackage{expl3}
 \RequirePackage{xparse}
 \RequirePackage{tikz}
+\RequirePackage{zref-savepos}
 \usetikzlibrary{calc}
 
 % Review Margin Configuration
@@ -202,6 +205,7 @@
 \bool_new:N \l_comm_in_conversation_bool
 \bool_new:N \g_comm_reply_handled_bool
 \bool_new:N \l_comm_save_first_bool
+\bool_new:N \l_comm_valid_coords_bool
 
 % Dynamic Commentators Registry
 \prop_new:N \g_comm_commentators_prop
@@ -238,6 +242,8 @@
 \dim_new:N \l_shift
 \tl_new:N \l_id_a
 \tl_new:N \l_id_b
+\tl_new:N \l_id_first
+\tl_new:N \l_id_last
 \tl_new:N \l_tmp_y_tl
 \tl_new:N \l_ht_tl
 
@@ -259,57 +265,76 @@
 }
 
 \cs_new_protected:Nn \__comm_solve_elasticity: {
-  \dim_set:Nn \l_comm_top_margin_dim { \paperheight / 2 - 0.75in }
-  \dim_set:Nn \l_comm_bottom_margin_dim { - \paperheight / 2 + 0.75in }
+  \dim_set:Nn \l_comm_top_margin_dim { \paperheight - 0.2in }
+  \dim_set:Nn \l_comm_bottom_margin_dim { 0.2in }
   
   \seq_map_inline:Nn \g__comm_pages_seq {
     \group_begin:
-    \prop_set_eq:NN \l_curr_y_prop \g__comm_src_y_prop
+    \bool_set_true:N \l_comm_valid_coords_bool
     
-    % Relaxation Loop (30 iterations)
-    \int_step_inline:nn { 30 } {
-      % Boundary constraints
-      \seq_map_inline:cn { g__comm_page_ids_seq_ ##1 } {
-        \dim_set:Nn \l_y_dim { \prop_item:Nn \l_curr_y_prop { ########1 } }
-        \prop_get:NnN \g__comm_box_ht_prop { ########1 } \l_ht_tl
-        \dim_set:Nn \l_ht_dim { \l_ht_tl }
-        
-        \dim_compare:nNnT { \l_y_dim + \l_ht_dim / 2 } > { \l_comm_top_margin_dim } {
-          \prop_put:Nox \l_curr_y_prop { ########1 } { \dim_eval:n { \l_comm_top_margin_dim - \l_ht_dim / 2 } }
-        }
-        \dim_compare:nNnT { \l_y_dim - \l_ht_dim / 2 } < { \l_comm_bottom_margin_dim } {
-          \prop_put:Nox \l_curr_y_prop { ########1 } { \dim_eval:n { \l_comm_bottom_margin_dim + \l_ht_dim / 2 } }
-        }
-      }
-      
-      % Pairwise repulsion (between i and i+1)
-      \int_step_inline:nn { \seq_count:c { g__comm_page_ids_seq_ ##1 } - 1 } {
-        \tl_set:Nx \l_id_a { \seq_item:cn { g__comm_page_ids_seq_ ##1 } { ########1 } }
-        \tl_set:Nx \l_id_b { \seq_item:cn { g__comm_page_ids_seq_ ##1 } { \int_eval:n { ########1 + 1 } } }
-        
-        \dim_set:Nn \l_y_a { \prop_item:No \l_curr_y_prop { \l_id_a } }
-        \dim_set:Nn \l_y_b { \prop_item:No \l_curr_y_prop { \l_id_b } }
-        
-        \dim_set:Nn \l_ht_a { \prop_item:No \g__comm_box_ht_prop { \l_id_a } }
-        \dim_set:Nn \l_ht_b { \prop_item:No \g__comm_box_ht_prop { \l_id_b } }
-        
-        \dim_set:Nn \l_min_dist { \l_ht_a / 2 + \l_ht_b / 2 + 3pt } % 3pt gap
-        \dim_set:Nn \l_curr_dist { \l_y_a - \l_y_b }
-        
-        \dim_compare:nNnT { \l_curr_dist } < { \l_min_dist } {
-          \dim_set:Nn \l_overlap { \l_min_dist - \l_curr_dist }
-          \prop_put:Nox \l_curr_y_prop { \l_id_a } { \dim_eval:n { \l_y_a + \l_overlap / 2 } }
-          \prop_put:Nox \l_curr_y_prop { \l_id_b } { \dim_eval:n { \l_y_b - \l_overlap / 2 } }
-        }
+    % Check if all comments on this page have valid (non-zero) coordinates
+    \seq_map_inline:cn { g__comm_page_ids_seq_ ##1 } {
+      \dim_set:Nn \l_y_dim { \prop_item:Nn \g__comm_src_y_prop { ####1 } }
+      \dim_compare:nNnT { \l_y_dim } = { 0pt } {
+        \bool_set_false:N \l_comm_valid_coords_bool
       }
     }
     
-    % Save final calculated shifts
-    \seq_map_inline:cn { g__comm_page_ids_seq_ ##1 } {
-      \dim_set:Nn \l_y_orig { \prop_item:Nn \g__comm_src_y_prop { ####1 } }
-      \dim_set:Nn \l_y_final { \prop_item:Nn \l_curr_y_prop { ####1 } }
-      \dim_set:Nn \l_shift { \l_y_orig - \l_y_final }
-      \tl_gset:cx { g__comm_shift_ ####1 _dim } { \dim_use:N \l_shift }
+    \bool_if:NT \l_comm_valid_coords_bool {
+      \prop_set_eq:NN \l_curr_y_prop \g__comm_src_y_prop
+      
+      % Relaxation Loop (30 iterations)
+      \int_step_inline:nnnn { 1 } { 1 } { 30 } {
+        % Boundary constraints (only if page has > 1 comment)
+        \int_compare:nT { \seq_count:c { g__comm_page_ids_seq_ ##1 } > 1 } {
+          % First comment (highest)
+          \tl_set:Nx \l_id_first { \seq_item:cn { g__comm_page_ids_seq_ ##1 } { 1 } }
+          \dim_set:Nn \l_y_dim { \prop_item:No \l_curr_y_prop { \l_id_first } }
+          \dim_set:Nn \l_ht_dim { \prop_item:No \g__comm_box_ht_prop { \l_id_first } }
+          \dim_compare:nNnT { \l_y_dim + \l_ht_dim / 2 } > { \l_comm_top_margin_dim } {
+            \prop_put:Nox \l_curr_y_prop { \l_id_first } { \dim_eval:n { \l_comm_top_margin_dim - \l_ht_dim / 2 } }
+          }
+          
+          % Last comment (lowest)
+          \tl_set:Nx \l_id_last { \seq_item:cn { g__comm_page_ids_seq_ ##1 } { \seq_count:c { g__comm_page_ids_seq_ ##1 } } }
+          \dim_set:Nn \l_y_dim { \prop_item:No \l_curr_y_prop { \l_id_last } }
+          \dim_set:Nn \l_ht_dim { \prop_item:No \g__comm_box_ht_prop { \l_id_last } }
+          \dim_compare:nNnT { \l_y_dim - \l_ht_dim / 2 } < { \l_comm_bottom_margin_dim } {
+            \prop_put:Nox \l_curr_y_prop { \l_id_last } { \dim_eval:n { \l_comm_bottom_margin_dim + \l_ht_dim / 2 } }
+          }
+        }
+        
+        % Pairwise repulsion (only if page has > 1 comment)
+        \int_compare:nT { \seq_count:c { g__comm_page_ids_seq_ ##1 } > 1 } {
+          \int_step_inline:nnnn { 1 } { 1 } { \seq_count:c { g__comm_page_ids_seq_ ##1 } - 1 } {
+            \tl_set:Nx \l_id_a { \seq_item:cn { g__comm_page_ids_seq_ ##1 } { ########1 } }
+            \tl_set:Nx \l_id_b { \seq_item:cn { g__comm_page_ids_seq_ ##1 } { \int_eval:n { ########1 + 1 } } }
+            
+            \dim_set:Nn \l_y_a { \prop_item:No \l_curr_y_prop { \l_id_a } }
+            \dim_set:Nn \l_y_b { \prop_item:No \l_curr_y_prop { \l_id_b } }
+            
+            \dim_set:Nn \l_ht_a { \prop_item:No \g__comm_box_ht_prop { \l_id_a } }
+            \dim_set:Nn \l_ht_b { \prop_item:No \g__comm_box_ht_prop { \l_id_b } }
+            
+            \dim_set:Nn \l_min_dist { \l_ht_a / 2 + \l_ht_b / 2 + 3pt } % 3pt gap
+            \dim_set:Nn \l_curr_dist { \l_y_a - \l_y_b }
+            
+            \dim_compare:nNnT { \l_curr_dist } < { \l_min_dist } {
+              \dim_set:Nn \l_overlap { \l_min_dist - \l_curr_dist }
+              \prop_put:Nox \l_curr_y_prop { \l_id_a } { \dim_eval:n { \l_y_a + \l_overlap / 2 } }
+              \prop_put:Nox \l_curr_y_prop { \l_id_b } { \dim_eval:n { \l_y_b - \l_overlap / 2 } }
+            }
+          }
+        }
+      }
+      
+      % Save final calculated shifts
+      \seq_map_inline:cn { g__comm_page_ids_seq_ ##1 } {
+        \dim_set:Nn \l_y_orig { \prop_item:Nn \g__comm_src_y_prop { ####1 } }
+        \dim_set:Nn \l_y_final { \prop_item:Nn \l_curr_y_prop { ####1 } }
+        \dim_set:Nn \l_shift { \l_y_orig - \l_y_final }
+        \tl_gset:cx { g__comm_shift_ ####1 _dim } { \dim_use:N \l_shift }
+      }
     }
     \group_end:
   }
@@ -349,6 +374,7 @@
   \int_set_eq:NN \l__comm_id_int \g__comm_count_int
   
   % Marker
+  \zsaveposy{commsrc-\int_use:N \l__comm_id_int}%
   \tikz[remember~picture,overlay,baseline]{
     \node[anchor=base,inner~sep=0pt,outer~sep=0pt](commsrc-\int_use:N \l__comm_id_int){\strut};
   }
@@ -372,7 +398,7 @@
     }
     \iow_now:Nx \@auxout {
       \exp_not:N \expandafter \exp_not:N \gdef \exp_not:N \csname commside \int_use:N \l__comm_id_int \exp_not:N \endcsname { \l_tmpa_tl }
-      \exp_not:N \commrecord { \int_use:N \l__comm_id_int } { \thepage } { \the\dimexpr\yn\relax } { \the\l_comm_box_height_dim }
+      \exp_not:N \commrecord { \int_use:N \l__comm_id_int } { \thepage } { \zposy{commsrc-\int_use:N \l__comm_id_int}sp } { \the\l_comm_box_height_dim }
     }
   \end{tikzpicture}
 
