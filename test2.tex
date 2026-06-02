@@ -1,0 +1,13 @@
+\documentclass{article}
+\usepackage{expl3}
+\usepackage{tikz}
+\begin{document}
+\begin{tikzpicture}
+  \node[draw, text width=3cm, font=\scriptsize\raggedright] (A) {
+    \textbf{Bill:} This is a test.
+  };
+  \node[draw, text width=3cm, font=\scriptsize\raggedright, inner ysep=2pt] (B) at (4,0) {
+    \textbf{Bill:} This is a test.
+  };
+\end{tikzpicture}
+\end{document}
