@@ -17,36 +17,31 @@ permissions:
 
 jobs:
   build:
-    name: Compile Package & Documentation
+    name: Compile Package & Generate CTAN Archive
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Compile LaTeX Package and Docs
+      - name: Build CTAN Package and Manual
         uses: xu-cheng/latex-action@v3
         with:
           root_file: conversationalcomments.dtx
-          # Unpack the sty file and generate the index/glossaries before latexmk compiles the final document.
-          pre_compile: |
-            latex conversationalcomments.ins
-            pdflatex -interaction=nonstopmode conversationalcomments.dtx
-            makeindex -s gind.ist -o conversationalcomments.ind conversationalcomments.idx
-            makeindex -s gglo.ist -o conversationalcomments.gls conversationalcomments.glo
-            pdflatex -interaction=nonstopmode conversationalcomments.dtx
+          # Run our verified CTAN build script as the compiler command
+          compiler: bash
+          args: ./build_ctan_package.sh
+          # Install zip and unzip inside the LaTeX Docker container
+          extra_system_packages: "zip unzip"
 
       - name: Upload Compiled Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: latex-package-dist
           path: |
+            conversationalcomments.zip
+            conversationalcomments-doc.pdf
             conversationalcomments.sty
-            conversationalcomments.pdf
-            conversationalcomments.dtx
-            conversationalcomments.ins
-            README.md
-            LICENSE
 
   release:
     name: Create GitHub Release
@@ -64,31 +59,12 @@ jobs:
           name: latex-package-dist
           path: dist
 
-      - name: Package for Distribution (ZIP)
-        run: |
-          # Create a structured release directory
-          mkdir -p release/conversationalcomments
-          
-          # Copy the compiled style, docs, and source files
-          cp dist/conversationalcomments.sty release/conversationalcomments/
-          cp dist/conversationalcomments.pdf release/conversationalcomments/
-          cp dist/conversationalcomments.dtx release/conversationalcomments/
-          cp dist/conversationalcomments.ins release/conversationalcomments/
-          cp README.md LICENSE release/conversationalcomments/
-          
-          # Create the ZIP archive
-          cd release
-          zip -r ../conversationalcomments.zip ./*
-          cd ..
-          
-          # Copy the PDF to the root for direct download on the release page
-          cp dist/conversationalcomments.pdf ./
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            conversationalcomments.zip
-            conversationalcomments.pdf
+            dist/conversationalcomments.zip
+            dist/conversationalcomments-doc.pdf
+            dist/conversationalcomments.sty
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

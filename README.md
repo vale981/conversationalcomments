@@ -71,3 +71,7 @@ For three or more authors, use the `\conversation` block. Inside this block, com
     \alice{And the connecting lines look beautiful!}
 }
 ```
+
+## License
+
+This material is subject to the MIT License. See the `LICENSE` file for the full license text.
