@@ -1,0 +1,13 @@
+# Standard LaTeX intermediate/auxiliary files
+*.aux
+*.log
+*.out
+*.glo
+*.idx
+*.hd
+*.toc
+*.ilg
+*.ind
+*.pdf
+*.sty
+*.gls
