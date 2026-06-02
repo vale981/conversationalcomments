@@ -174,6 +174,8 @@
 \RequirePackage{xparse}
 \RequirePackage{tikz}
 \RequirePackage{zref-savepos}
+\RequirePackage{zref-abspage}
+\RequirePackage{zref-user}
 \usetikzlibrary{calc}
 
 % Review Margin Configuration
@@ -244,18 +246,25 @@
 \tl_new:N \l_id_b
 \tl_new:N \l_id_first
 \tl_new:N \l_id_last
+\tl_new:N \l_comm_side_tl
 \tl_new:N \l_tmp_y_tl
 \tl_new:N \l_ht_tl
 
 \cs_generate_variant:Nn \prop_item:Nn { No }
 \cs_generate_variant:Nn \prop_put:Nnn { Nox }
+\cs_generate_variant:Nn \seq_gput_right:Nn { Nx }
 
 \cs_new_protected:Nn \__comm_record:nnnn {
-  \seq_if_exist:cF { g__comm_page_ids_seq_ #2 } {
-    \seq_new:c { g__comm_page_ids_seq_ #2 }
-    \seq_gput_right:Nn \g__comm_pages_seq { #2 }
+  \tl_set:Nn \l_comm_side_tl { R } % default
+  \cs_if_exist:cT { commside #1 } {
+    \tl_set:Nx \l_comm_side_tl { \use:c { commside #1 } }
   }
-  \seq_gput_right:cn { g__comm_page_ids_seq_ #2 } { #1 }
+  
+  \seq_if_exist:cF { g__comm_page_ids_seq_ #2 _ \l_comm_side_tl } {
+    \seq_new:c { g__comm_page_ids_seq_ #2 _ \l_comm_side_tl }
+    \seq_gput_right:Nx \g__comm_pages_seq { #2 _ \l_comm_side_tl }
+  }
+  \seq_gput_right:cn { g__comm_page_ids_seq_ #2 _ \l_comm_side_tl } { #1 }
   \prop_gput:Nnn \g__comm_src_y_prop { #1 } { #3 }
   \prop_gput:Nnn \g__comm_box_ht_prop { #1 } { #4 }
 }
@@ -272,7 +281,7 @@
     \group_begin:
     \bool_set_true:N \l_comm_valid_coords_bool
     
-    % Check if all comments on this page have valid (non-zero) coordinates
+    % Check if all comments on this page-side have valid (non-zero) coordinates
     \seq_map_inline:cn { g__comm_page_ids_seq_ ##1 } {
       \dim_set:Nn \l_y_dim { \prop_item:Nn \g__comm_src_y_prop { ####1 } }
       \dim_compare:nNnT { \l_y_dim } = { 0pt } {
@@ -285,7 +294,7 @@
       
       % Relaxation Loop (30 iterations)
       \int_step_inline:nnnn { 1 } { 1 } { 30 } {
-        % Boundary constraints (only if page has > 1 comment)
+        % Boundary constraints (only if page-side has > 1 comment)
         \int_compare:nT { \seq_count:c { g__comm_page_ids_seq_ ##1 } > 1 } {
           % First comment (highest)
           \tl_set:Nx \l_id_first { \seq_item:cn { g__comm_page_ids_seq_ ##1 } { 1 } }
@@ -304,7 +313,7 @@
           }
         }
         
-        % Pairwise repulsion (only if page has > 1 comment)
+        % Pairwise repulsion (only if page-side has > 1 comment)
         \int_compare:nT { \seq_count:c { g__comm_page_ids_seq_ ##1 } > 1 } {
           \int_step_inline:nnnn { 1 } { 1 } { \seq_count:c { g__comm_page_ids_seq_ ##1 } - 1 } {
             \tl_set:Nx \l_id_a { \seq_item:cn { g__comm_page_ids_seq_ ##1 } { ########1 } }
@@ -348,6 +357,7 @@
 \cs_new_protected:Nn \__comm_draw_box:nn {
   \group_begin:
   \noindent % Ensure no indent in the margin
+  \zlabel{commdest-#2}%
   \begin{tikzpicture}[remember~picture, baseline=(commdest-#2.center)]
     \node [
       draw=\l__comm_color_tl,
@@ -375,6 +385,7 @@
   
   % Marker
   \zsaveposy{commsrc-\int_use:N \l__comm_id_int}%
+  \zlabel{commsrcpage-\int_use:N \l__comm_id_int}%
   \tikz[remember~picture,overlay,baseline]{
     \node[anchor=base,inner~sep=0pt,outer~sep=0pt](commsrc-\int_use:N \l__comm_id_int){\strut};
   }
@@ -435,20 +446,24 @@
     \group_end:
   }
 
-  % Draw the connecting line
-  \begin{tikzpicture}[remember~picture,overlay]
-    \path (commsrc-\int_use:N \l__comm_id_int.center); \pgfgetlastxy{\commxsrc}{\commysrc}
-    \path (commdest-\int_use:N \l__comm_id_int.center); \pgfgetlastxy{\commxdest}{\commydest}
-    \ifdim \commxdest > \commxsrc
-      \draw[semithick, \l__comm_color_tl, opacity=0.8] 
-        ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) + (0.5*\textwidth, 0)$) 
-        -- (commdest-\int_use:N \l__comm_id_int.west);
-    \else
-      \draw[semithick, \l__comm_color_tl, opacity=0.8] 
-        ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) - (0.5*\textwidth, 0)$) 
-        -- (commdest-\int_use:N \l__comm_id_int.east);
-    \fi
-  \end{tikzpicture}
+  % Draw the connecting line (only if both source and destination end up on the same page)
+  \int_set:Nn \l_tmpa_int { \zref@extractdefault { commsrcpage-\int_use:N \l__comm_id_int } { abspage } { 0 } }
+  \int_set:Nn \l_tmpb_int { \zref@extractdefault { commdest-\int_use:N \l__comm_id_int } { abspage } { 1 } }
+  \int_compare:nNnT { \l_tmpa_int } = { \l_tmpb_int } {
+    \begin{tikzpicture}[remember~picture,overlay]
+      \path (commsrc-\int_use:N \l__comm_id_int.center); \pgfgetlastxy{\commxsrc}{\commysrc}
+      \path (commdest-\int_use:N \l__comm_id_int.center); \pgfgetlastxy{\commxdest}{\commydest}
+      \ifdim \commxdest > \commxsrc
+        \draw[semithick, \l__comm_color_tl, opacity=0.8] 
+          ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) + (0.5*\textwidth, 0)$) 
+          -- (commdest-\int_use:N \l__comm_id_int.west);
+      \else
+        \draw[semithick, \l__comm_color_tl, opacity=0.8] 
+          ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) - (0.5*\textwidth, 0)$) 
+          -- (commdest-\int_use:N \l__comm_id_int.east);
+      \fi
+    \end{tikzpicture}
+  }
 }
 
 % Core alternating processing logic
