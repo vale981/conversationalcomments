@@ -7,6 +7,14 @@ A \LaTeX\ interface for margin comments linked to highlighted document text. It 
 - `draft` (default): Enables comments, highlights, and geometry adjustments.
 - `final`: Disables all comments and highlights, restoring the original document geometry.
 
+## Conversation Resolution and Reporting
+
+- **Starred variant:** Commentator commands and the `\conversation` block support a starred variant (e.g., `\bill*`, `\conversation*`) to mark a thread as resolved. Resolved comments display a gray `[Resolved]` prefix in the margin.
+- **Reporting macro:** Use `\printconversations[filter]` to render a hyperlinked summary report of conversations with links back to the text:
+  - `\printconversations` (or `\printconversations[unresolved]`): Lists unresolved conversations.
+  - `\printconversations[all]`: Lists both resolved and unresolved conversations.
+  - `\printconversations[resolved]`: Lists resolved conversations.
+
 ## Distribution Structure
 
 This package is distributed as a documented \LaTeX\ (`.dtx`) and installation batch (`.ins`) pair:

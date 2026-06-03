@@ -147,6 +147,24 @@
 %   \alice{The comments are aligned with the text.}
 % }
 %
+% \subsection{Conversation Resolution and Reporting}
+% All commentator macros and the \cs{conversation} environment support a starred variant (e.g., \cs{bill*}, \cs{conversation*}) to mark a conversation as resolved. Resolved comments are labeled with a \texttt{[Resolved]} prefix in the margin.
+%
+% \DescribeMacro{\printconversations}
+% Use the \cs{printconversations} macro to generate a hyperlinked summary report of all conversations in the document:
+% \begin{verbatim}
+%   \printconversations[filter]
+% \end{verbatim}
+% Supported filter arguments are:
+% \begin{itemize}
+%   \item \texttt{unresolved} (default): Prints unresolved conversations.
+%   \item \texttt{all}: Prints both resolved and unresolved conversations.
+%   \item \texttt{resolved}: Prints resolved conversations.
+% \end{itemize}
+%
+% Here is a live demonstration of the summary report listing all conversations currently in this manual:
+% \printconversations[all]
+%
 % \subsection{Elastic Overlap Prevention (Repulsion)}
 %
 % When multiple comment boxes are placed on consecutive or nearby lines, standard margin notes would overlap.
@@ -217,13 +235,25 @@
 \seq_new:N \l__comm_args_seq
 \tl_new:N \l__comm_body_tl
 \tl_new:N \l__comm_color_tl
+\tl_new:N \l__comm_line_color_tl
 \tl_new:N \l__comm_target_tl
+\tl_new:N \l__comm_initiator_tl
+\tl_new:N \l__comm_initiator_color_tl
+\tl_new:N \l__comm_snippet_tl
+\prop_new:N \l_comm_replies_prop
+\int_new:N \l_comm_replies_count
+\tl_new:N \l_author_tl
+\tl_new:N \l_body_tl
 \int_new:N \l__comm_id_int
 \bool_new:N \l_comm_first_reply_bool
 \bool_new:N \l_comm_in_conversation_bool
+\bool_new:N \l_comm_in_report_bool
 \bool_new:N \g_comm_reply_handled_bool
 \bool_new:N \l_comm_save_first_bool
 \bool_new:N \l_comm_valid_coords_bool
+\bool_new:N \l_comm_resolved_bool
+\bool_new:N \l_comm_should_print_bool
+\seq_new:N \g_comm_report_seq
 
 % Dynamic Commentators Registry
 \prop_new:N \g_comm_commentators_prop
@@ -389,6 +419,9 @@
     ] (commdest-#2) {%
       \bool_set_true:N \l_comm_in_conversation_bool%
       \setlength{\parindent}{0pt}%
+      \bool_if:NT \l_comm_resolved_bool {
+        \textcolor{gray}{\textbf{[Resolved]}} \par\vspace{2pt}
+      }
       \ignorespaces #1%
     };
   \end{tikzpicture}
@@ -403,12 +436,14 @@
       \l__comm_target_tl
     }
   }{
+    \tl_set_eq:NN \l__comm_line_color_tl \l__comm_color_tl
     \int_gincr:N \g__comm_count_int
     \int_set_eq:NN \l__comm_id_int \g__comm_count_int
     
     % Marker
     \zsaveposy{commsrc-\int_use:N \l__comm_id_int}%
     \zlabel{commsrcpage-\int_use:N \l__comm_id_int}%
+    \hypertarget{commsrc-\int_use:N \l__comm_id_int}{}%
     \tikz[remember~picture,overlay,baseline]{
       \node[anchor=base,inner~sep=0pt,outer~sep=0pt](commsrc-\int_use:N \l__comm_id_int){\strut};
     }
@@ -433,6 +468,7 @@
     \iow_now:Nx \@auxout {
       \exp_not:N \expandafter \exp_not:N \gdef \exp_not:N \csname commside \int_use:N \l__comm_id_int \exp_not:N \endcsname { \l_tmpa_tl }
       \exp_not:N \commrecord { \int_use:N \l__comm_id_int } { \thepage } { \zposy{commsrc-\int_use:N \l__comm_id_int}sp } { \the\l_comm_box_height_dim }
+      \exp_not:N \commreportentry { \int_use:N \l__comm_id_int } { \thepage } { \tl_to_str:N \l__comm_initiator_tl } { \tl_to_str:N \l__comm_initiator_color_tl } { \tl_to_str:N \l__comm_target_tl } { \exp_not:V \l__comm_snippet_tl } { \bool_if:NTF \l_comm_resolved_bool { true } { false } }
     }
   \end{tikzpicture}
 
@@ -465,7 +501,7 @@
 
   \tl_if_blank:nF { \l__comm_target_tl } { 
     \group_begin:
-    \color{\l__comm_color_tl} \l__comm_target_tl 
+    \color{\l__comm_line_color_tl} \l__comm_target_tl 
     \group_end:
   }
 
@@ -473,19 +509,21 @@
   \int_set:Nn \l_tmpa_int { \zref@extractdefault { commsrcpage-\int_use:N \l__comm_id_int } { abspage } { 0 } }
   \int_set:Nn \l_tmpb_int { \zref@extractdefault { commdest-\int_use:N \l__comm_id_int } { abspage } { 1 } }
   \int_compare:nNnT { \l_tmpa_int } = { \l_tmpb_int } {
-    \begin{tikzpicture}[remember~picture,overlay]
-      \path (commsrc-\int_use:N \l__comm_id_int.center); \pgfgetlastxy{\commxsrc}{\commysrc}
-      \path (commdest-\int_use:N \l__comm_id_int.center); \pgfgetlastxy{\commxdest}{\commydest}
-      \ifdim \commxdest > \commxsrc
-        \draw[semithick, \l__comm_color_tl, opacity=0.8] 
-          ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) + (0.5*\textwidth, 0)$) 
-          -- (commdest-\int_use:N \l__comm_id_int.west);
-      \else
-        \draw[semithick, \l__comm_color_tl, opacity=0.8] 
-          ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) - (0.5*\textwidth, 0)$) 
-          -- (commdest-\int_use:N \l__comm_id_int.east);
-      \fi
-    \end{tikzpicture}
+    \use:x {
+      \exp_not:N \begin{tikzpicture}[remember~picture,overlay]
+        \exp_not:N \path (commsrc-\int_use:N \l__comm_id_int.center); \exp_not:N \pgfgetlastxy{\exp_not:N \commxsrc}{\exp_not:N \commysrc}
+        \exp_not:N \path (commdest-\int_use:N \l__comm_id_int.center); \exp_not:N \pgfgetlastxy{\exp_not:N \commxdest}{\exp_not:N \commydest}
+        \exp_not:N \ifdim \exp_not:N \commxdest > \exp_not:N \commxsrc
+          \exp_not:N \draw[semithick, \l__comm_line_color_tl, opacity=0.8] 
+            ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) + (0.5*\exp_not:N \textwidth, 0)$) 
+            -- (commdest-\int_use:N \l__comm_id_int.west);
+        \exp_not:N \else
+          \exp_not:N \draw[semithick, \l__comm_line_color_tl, opacity=0.8] 
+            ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) - (0.5*\exp_not:N \textwidth, 0)$) 
+            -- (commdest-\int_use:N \l__comm_id_int.east);
+        \exp_not:N \fi
+      \exp_not:N \end{tikzpicture}
+    }
   }
 }
 }
@@ -493,10 +531,10 @@
 % Core alternating processing logic
 \cs_generate_variant:Nn \prop_get:NnN { NoN }
 
-% Dynamic evaluation macro for a reply
 \box_new:N \l_comm_scratch_box
 
-\cs_new_protected:Nn \__comm_eval_reply:nn {
+% Public evaluation macro for a reply
+\NewDocumentCommand{\commreply}{m m}{
   \bool_gset_false:N \g_comm_reply_handled_bool
   \group_begin:
     \bool_set_eq:NN \l_comm_save_first_bool \l_comm_first_reply_bool
@@ -525,14 +563,17 @@
   
   \tl_set_eq:NN \l__comm_target_tl \l_tmpa_tl
 
+  \prop_clear:N \l_comm_replies_prop
   \seq_if_empty:NTF \l__comm_args_seq {
-    \tl_set_eq:NN \l__comm_body_tl \l_tmpa_tl
+    \prop_put:Nnn \l_comm_replies_prop { 1/author } { #1 }
+    \prop_put:Nox \l_comm_replies_prop { 1/body } { \l_tmpa_tl }
+    \int_set:Nn \l_comm_replies_count { 1 }
     \tl_clear:N \l__comm_target_tl
   }{
-    \tl_clear:N \l__comm_body_tl
     \prop_get:NnN \g_comm_commentators_prop { #1/partner } \l_initiator_partner_id_tl
+    \int_set:Nn \l_comm_replies_count { \seq_count:N \l__comm_args_seq }
     
-    \int_step_inline:nn { \seq_count:N \l__comm_args_seq } {
+    \int_step_inline:nn { \l_comm_replies_count } {
       \int_if_odd:nTF { ##1 } { 
         \tl_set:Nn \l_curr_id_tl { #1 }
       }{ 
@@ -541,10 +582,28 @@
           \tl_set:Nn \l_curr_id_tl { #1 }
         }
       }
-      
-      \tl_put_right:Nx \l__comm_body_tl { 
-        \exp_not:N \__comm_eval_reply:nn { \l_curr_id_tl } { \seq_item:Nn \l__comm_args_seq { ##1 } } 
-      }
+      \prop_put:Nox \l_comm_replies_prop { ##1/author } { \l_curr_id_tl }
+      \prop_put:Nox \l_comm_replies_prop { ##1/body } { \seq_item:Nn \l__comm_args_seq { ##1 } }
+    }
+  }
+
+  % Replay/Build \l__comm_body_tl from property list with strict expansion protection
+  \tl_clear:N \l__comm_body_tl
+  \int_step_inline:nn { \l_comm_replies_count } {
+    \prop_get:NnN \l_comm_replies_prop { ##1/author } \l_author_tl
+    \prop_get:NnN \l_comm_replies_prop { ##1/body } \l_body_tl
+    \tl_put_right:Nx \l__comm_body_tl { 
+      \exp_not:N \commreply { \l_author_tl } { \exp_not:o \l_body_tl } 
+    }
+  }
+
+  \prop_get:NnN \g_comm_commentators_prop { #1/name } \l__comm_initiator_tl
+  \prop_get:NnN \g_comm_commentators_prop { #1/color } \l__comm_initiator_color_tl
+  \tl_set:Nx \l__comm_snippet_tl {
+    \seq_if_empty:NTF \l__comm_args_seq {
+      \exp_not:N \commreply { #1 } { \exp_not:V \l__comm_body_tl }
+    }{
+      \exp_not:V \l__comm_body_tl
     }
   }
 
@@ -559,15 +618,19 @@
   \prop_gput:Nnn \g_comm_commentators_prop { #1/partner } { #4 }
 
   % Main alternating command: \<id> (e.g. \bill)
-  \exp_args:Nc \NewDocumentCommand { #1 } { m +g +g +g +g +g +g +g O{0pt} } {%
+  \exp_args:Nc \NewDocumentCommand { #1 } { s m +g +g +g +g +g +g O{0pt} } {%
     \bool_if:NTF \l_comm_in_conversation_bool {%
       % Inside a conversation: act as inline reply (format first argument)
-      \use:c { #1 reply } { ##1 }%
+      \use:c { #1 reply } { ##2 }%
     }{%
       % Thread starter
+      \bool_if:NTF ##1 {
+        \bool_set_true:N \l_comm_resolved_bool
+      }{
+        \bool_set_false:N \l_comm_resolved_bool
+      }
       \seq_clear:N \l__comm_args_seq%
-      \seq_put_right:Nn \l__comm_args_seq { ##1 }%
-      \IfValueT { ##2 } { \seq_put_right:Nn \l__comm_args_seq { ##2 } }%
+      \seq_put_right:Nn \l__comm_args_seq { ##2 }%
       \IfValueT { ##3 } { \seq_put_right:Nn \l__comm_args_seq { ##3 } }%
       \IfValueT { ##4 } { \seq_put_right:Nn \l__comm_args_seq { ##4 } }%
       \IfValueT { ##5 } { \seq_put_right:Nn \l__comm_args_seq { ##5 } }%
@@ -595,15 +658,87 @@
   \__comm_register_commentator:nnnn { #1 } { #2 } { #3 } { #4 }
 }
 
+% Helper for adding report entries to the sequence
+\cs_new_protected:Nn \__comm_add_report_entry:nnnnnnn {
+  \seq_gput_right:Nn \g_comm_report_seq { { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 } }
+}
+
+\NewDocumentCommand{\commreportentry}{m m m m m m m}{
+  \__comm_add_report_entry:nnnnnnn { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 }
+}
+
 % Multi-author explicit conversation command
-\NewDocumentCommand{\conversation}{m +m O{0pt}}{
+\NewDocumentCommand{\conversation}{s m +m O{0pt}}{
   \group_begin:
+  \bool_if:NTF #1 {
+    \bool_set_true:N \l_comm_resolved_bool
+  }{
+    \bool_set_false:N \l_comm_resolved_bool
+  }
   \bool_gset_true:N \l_comm_first_reply_bool
-  \tl_set:Nn \l__comm_target_tl { #1 }
-  \tl_set:Nn \l__comm_body_tl { #2 }
+  \tl_set:Nn \l__comm_target_tl { #2 }
+  \tl_set:Nn \l__comm_body_tl { #3 }
   \tl_trim_spaces:N \l__comm_body_tl
   \tl_set:Nn \l__comm_color_tl { gray } % Neutral rim for multi-author
-  \__comm_render_note:n { #3 }
+  \tl_set:Nn \l__comm_initiator_tl { Group }
+  \tl_set:Nn \l__comm_initiator_color_tl { gray }
+  \tl_set_eq:NN \l__comm_snippet_tl \l__comm_body_tl
+  \__comm_render_note:n { #4 }
+  \group_end:
+}
+
+% Fallbacks for hyperref if not loaded
+\providecommand{\hypertarget}[2]{#2}
+\providecommand{\hyperlink}[2]{#2}
+
+% Helper for rendering report entries
+\cs_new_protected:Nn \__comm_render_report_entry:nnnnnnnn {
+  \group_begin:
+  \tl_set:Nn \l_curr_filter_tl { #8 }
+  \bool_set_true:N \l_comm_should_print_bool
+  
+  \str_if_eq:VnT \l_curr_filter_tl { unresolved } {
+    \str_if_eq:eeT { #7 } { true } {
+      \bool_set_false:N \l_comm_should_print_bool
+    }
+  }
+  \str_if_eq:VnT \l_curr_filter_tl { resolved } {
+    \str_if_eq:eeT { #7 } { false } {
+      \bool_set_false:N \l_comm_should_print_bool
+    }
+  }
+  
+  \bool_if:NT \l_comm_should_print_bool {
+    \vspace{8pt}
+    \noindent
+    \hyperlink{commsrc-#1}{\textbf{[\##1]}}~on~page~\hyperlink{commsrc-#1}{#2}~~---~~%
+    \str_if_eq:eeTF { #7 } { true } {
+      \textcolor{gray}{\textbf{[Resolved]}}
+    }{
+      \textcolor{red}{\textbf{[Unresolved]}}
+    }
+    \par\vspace{3pt}
+    \tl_if_blank:nF { #5 } {
+      \hspace*{1.5em}\textbf{Target:}~\texttt{\tl_to_str:n { #5 }} \par\vspace{2pt}
+    }
+    \hspace*{1.5em}\textbf{Initiator:}~\textcolor{#4}{\textbf{#3}} \par\vspace{2pt}
+    \hspace*{1.5em}\textbf{Comments:}~#6
+    \par
+  }
+  \group_end:
+}
+
+% Public API to print report
+\NewDocumentCommand{\printconversations}{O{unresolved}}{
+  \group_begin:
+  \bool_set_true:N \l_comm_in_conversation_bool
+  \seq_if_empty:NTF \g_comm_report_seq {
+    No~conversations~recorded.
+  }{
+    \seq_map_inline:Nn \g_comm_report_seq {
+      \__comm_render_report_entry:nnnnnnnn ##1 { #1 }
+    }
+  }
   \group_end:
 }
 
