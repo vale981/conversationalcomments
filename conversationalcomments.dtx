@@ -57,16 +57,11 @@
 % \maketitle
 %
 % \begin{abstract}
-%   The \textsf{conversationalcomments} package provides a customizable review mode for \LaTeX\ documents. It is specifically optimized for single- and multi-column layouts (such as RevTeX). Authors can register custom commentators that dynamically generate user macros supporting inline text-linked highlighting, standalone notes, auto-alternating conversation threads, and multi-author conversation blocks.
+%   The \textsf{conversationalcomments} package provides a \LaTeX\ interface for margin comments linked to highlighted document text. It supports commentator registration, alternating threads, and multi-author conversation blocks.
 % \end{abstract}
 %
 % \section{Introduction}
-% When co-authoring scientific papers, leaving clear, context-linked feedback is crucial.
-% While standard marginal notes are functional, they often lack conversational structure, leading to scattered replies and confusing discussions.
-%
-% The \textsf{conversationalcomments} package solves this by establishing a dynamic, conversational review framework.
-% Comments are neatly grouped into boxes in the page margins, with colored highlights in the document body and visual connection lines linking each comment directly to its source.
-% Multiple authors can participate in structured, alternating discussion threads or collaborative conversation blocks.
+% This package implements a margin comment environment for \LaTeX. Commentators registered in the preamble generate macros for text highlighting and margin notes with connecting lines. Features include alternating threads and multi-author conversation blocks.
 %
 % \section{Usage Guide}
 %
@@ -97,7 +92,7 @@
 %   \newcommentator{alice}{Alice}{pastelgreen}
 % \end{verbatim}
 %
-% This generates custom author macros like \cs{bill}, \cs{vale}, and \cs{alice}, as well as their corresponding inline formatters (such as \cs{billreply}, though these are usually invoked automatically).
+% This generates author macros like \cs{bill}, \cs{vale}, and \cs{alice}, as well as their corresponding inline formatters (such as \cs{billreply}, which are invoked automatically).
 %
 % \subsection{Comment Modes}
 %
@@ -106,7 +101,7 @@
 % \begin{verbatim}
 %   \bill{highlighted text}{This text is blue, and this is my comment.}
 % \end{verbatim}
-% Here is a live example: \bill{this is a live text-linked comment}{Look! This comment is rendered in the margin with a connecting line back to this text.}
+% Here is a live example: \bill{this is a live text-linked comment}{This comment is rendered in the margin with a connecting line back to this text.}
 %
 % \subsubsection{Standalone Notes}
 % To place a floating note in the margin without highlighting any body text, leave the first argument empty:
@@ -116,48 +111,48 @@
 % \vale{}{This is a live standalone note next to this paragraph.}
 %
 % \subsubsection{Conversational Threads (Alternating)}
-% Provide consecutive arguments to let the package automatically alternate replies between the commentator and their registered default partner:
+% Provide consecutive arguments to alternate replies between the commentator and their registered default partner:
 % \begin{verbatim}
-%   \bill{The system dynamics}{Initial comment by Bill}{Vale's reply}{Bill's final follow-up.}
+%   \bill{The system dynamics}{Initial query}{First response}{Second response}
 % \end{verbatim}
-% Here is a live alternating thread in action: \bill{Live conversation}{Is this standard DTX compilation?}{Yes, we are compiling the package documentation and demonstrating it at the same time!}{Fabulous!}
+% Here is an alternating thread example: \bill{Live conversation}{Is this compiled from the source file?}{Yes, the documentation is compiled directly from the .dtx source.}{The output is displayed in the margin.}
 %
 % \subsubsection{Third-Party Nesting}
-% A third reviewer can join a two-author thread by nesting their custom command inside a reply argument:
+% A third reviewer can join a two-author thread by nesting their command inside a reply argument:
 % \begin{verbatim}
-%   \bill{Target Text}{Hey Vale, want to grab lunch?}{\vale{Sure!}}{\alice{Can I join too?}}
+%   \bill{Reference Text}{Initial comment.}{\vale{Reviewer response.}}{\alice{Additional comment.}}
 % \end{verbatim}
-% Here is a live example of third-party nesting: \bill{Nesting example}{Lunch today?}{\vale{Yes please!}}{\alice{Count me in!}}
+% Here is an example of nesting: \bill{Nesting example}{Initial query.}{\vale{First response.}}{\alice{Second response.}}
 %
 % \subsection{Multi-Author Conversations}
 %
 % \DescribeMacro{\conversation}
-% For larger discussions involving more than two people, use the general \cs{conversation}\marg{Target Text}\marg{Body} block. Inside this block, commentator macros automatically switch to behave as inline reply formatters:
+% For discussions involving three or more people, use the \cs{conversation}\marg{Target Text}\marg{Body} environment. Inside this environment, commentator commands act as inline reply formatters:
 % \begin{verbatim}
 %   \conversation{Target Text}{
-%     \bill{I think we should rewrite this.}
-%     \vale{I agree with Bill.}
-%     \alice{Let's make sure Valentin reviews it too.}
+%     \bill{Proposed revision for this section.}
+%     \vale{The modification matches the technical requirements.}
+%     \alice{The comments are aligned with the text.}
 %   }
 % \end{verbatim}
-% Here is a live multi-author conversation:
+% Here is an example of a multi-author conversation:
 % \conversation{Multi-author demo}{
-%   \bill{We are using context-aware macros.}
-%   \vale{It works flawlessly inside the DTX driver.}
-%   \alice{And the connecting lines look beautiful!}
+%   \bill{Proposed revision for this section.}
+%   \vale{The modification matches the technical requirements.}
+%   \alice{The comments are aligned with the text.}
 % }
 %
 % \subsection{Elastic Overlap Prevention (Repulsion)}
 %
-% When multiple comment boxes are placed close to each other on the same page, standard margin notes would overlap and become unreadable.
-% The \textsf{conversationalcomments} package automatically prevents this by executing a 1D force-directed spring relaxation algorithm on each page.
-% Adjacent comment boxes repel each other, and they are also repelled by the upper and lower margins of the page to stay within printable boundaries.
+% When multiple comment boxes are placed on consecutive or nearby lines, standard margin notes would overlap.
+% The package prevents this by applying a 1D force-directed spring relaxation algorithm to shift overlapping comments.
+% Adjacent comment boxes are shifted vertically relative to each other and bounded by the top and bottom page margins.
 %
-% Here is a live demonstration of three distinct, closely-placed comment boxes on consecutive lines of text. Without overlap prevention, they would completely overlap, but they are dynamically shifted to remain perfectly readable:
+% The following example demonstrates the positioning of three comments on consecutive lines:
 %
-% On this first line of text, we place a comment by Bill: \bill{First comment}{Bill's note on the first line.}
-% On this second consecutive line of text, we place a comment by Vale: \vale{Second comment}{Vale's note on the second line.}
-% And on this third consecutive line of text, we place a comment by Alice: \alice{Third comment}{Alice's note on the third line.}
+% First line: \bill{First comment}{Comment by Bill.}
+% Second line: \vale{Second comment}{Comment by Vale.}
+% Third line: \alice{Third comment}{Comment by Alice.}
 %
 % \StopEventually{\PrintChanges\PrintIndex}
 %

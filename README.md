@@ -1,34 +1,34 @@
 # conversationalcomments
 
-A customizable review comments package for LaTeX. It provides dynamic commentator registration, text highlighting with connection lines to marginal notes, auto-alternating conversational threads, and multi-author conversation blocks.
+A \LaTeX\ interface for margin comments linked to highlighted document text. It supports commentator registration, alternating threads, and multi-author conversation blocks.
 
 ## Distribution Structure
 
-Following CTAN standards, this package is distributed as a documented LaTeX (`.dtx`) and installation batch (`.ins`) pair:
+This package is distributed as a documented \LaTeX\ (`.dtx`) and installation batch (`.ins`) pair:
 
-- `conversationalcomments.dtx`: The single source file containing both the documented LaTeX package code and the user manual.
-- `conversationalcomments.ins`: The installation script used to extract the style file.
-- `conversationalcomments.pdf`: The compiled user manual.
+- `conversationalcomments.dtx`: Source file containing both the package code and the user manual.
+- `conversationalcomments.ins`: Installation script.
+- `conversationalcomments.pdf`: Compiled user manual.
 
 ## Installation / Extraction
 
-To extract the `conversationalcomments.sty` file, run:
+Extract the style file:
 ```bash
 latex conversationalcomments.ins
 ```
 
-This will generate `conversationalcomments.sty`. Move this file into your TeX search path (e.g., your local directory or your local `texmf` tree) to use it.
+Move `conversationalcomments.sty` into the \TeX\ search path.
 
 ## Compiling the Documentation
 
-To build the PDF user manual (`conversationalcomments.pdf`), compile the `.dtx` file using `pdflatex`:
+Compile the user manual:
 ```bash
 pdflatex conversationalcomments.dtx
 ```
 
 ## Quick Start Example
 
-Add this to your preamble:
+Preamble:
 ```latex
 \usepackage{conversationalcomments}
 \setreviewmarginwidth{1.5in}
@@ -39,7 +39,7 @@ Add this to your preamble:
 \newcommentator{alice}{Alice}{pastelgreen}
 ```
 
-Use them in your document body:
+Document body:
 
 ### 1. Basic Comments
 ```latex
@@ -50,25 +50,25 @@ Use them in your document body:
 \vale{}{A floating standalone note in the margin.}
 ```
 
-### 2. Auto-Alternating Conversation Threads (Two-Author Shorthand)
-By adding consecutive braced arguments, replies automatically alternate between the initiator and their default partner:
+### 2. Auto-Alternating Conversation Threads
+Consecutive braced arguments alternate replies between the commentator and their default partner:
 ```latex
-\bill{Let's discuss}{How about this?}{I think it looks good!}{Thanks, let's keep it.}
+\bill{Reference text}{Initial query}{First response}{Second response}
 ```
 
-### 3. Third-Party Nesting (Joining a Conversation)
-A third author (like Alice) can join a two-author thread by nesting their custom command inside a reply argument:
+### 3. Third-Party Nesting
+A third commentator can join a thread by nesting their command inside a reply argument:
 ```latex
-\bill{Target Text}{Hey Vale, want to grab lunch?}{\vale{Sure!}}{\alice{Can I join too?}}
+\bill{Reference Text}{Initial comment.}{\vale{Reviewer response.}}{\alice{Additional comment.}}
 ```
 
 ### 4. Multi-Author Collaborative Conversations (`\conversation`)
-For three or more authors, use the `\conversation` block. Inside this block, commentator commands automatically adapt to act as inline reply formatters:
+For three or more commentators, commentator commands inside the `\conversation` block act as inline reply formatters:
 ```latex
 \conversation{Target text to review}{
-    \bill{We are using context-aware macros.}
-    \vale{It works flawlessly inside the conversation block.}
-    \alice{And the connecting lines look beautiful!}
+    \bill{Proposed revision for this section.}
+    \vale{The modification matches the technical requirements.}
+    \alice{The comments are aligned with the text.}
 }
 ```
 
