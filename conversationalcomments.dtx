@@ -70,7 +70,12 @@
 % \begin{verbatim}
 %   \usepackage{conversationalcomments}
 % \end{verbatim}
-% By default, this adjusts your document geometry to provide a margin on the right side of the paper for comments.
+%
+% The package supports the following options:
+% \begin{itemize}
+%   \item \texttt{draft} (default): Enables comments, highlights, and geometry adjustments.
+%   \item \texttt{final}: Disables all comments and highlights, restoring the original document geometry.
+% \end{itemize}
 %
 % \DescribeMacro{\setreviewmarginwidth}
 % To customize the width of the review margins, use \cs{setreviewmarginwidth}\marg{width}.
@@ -162,10 +167,19 @@
 %<*package>
 % \fi
 %    \begin{macrocode}
+\RequirePackage{expl3}
+\ExplSyntaxOn
+\bool_new:N \g_comm_final_bool
+
+\DeclareOption{draft}{\bool_gset_false:N \g_comm_final_bool}
+\DeclareOption{final}{\bool_gset_true:N \g_comm_final_bool}
+\ExecuteOptions{draft}
+\ProcessOptions\relax
+\ExplSyntaxOff
+
 \RequirePackage{xcolor}
 \RequirePackage{geometry}
 \RequirePackage{marginnote}
-\RequirePackage{expl3}
 \RequirePackage{xparse}
 \RequirePackage{tikz}
 \RequirePackage{zref-savepos}
@@ -173,10 +187,13 @@
 \RequirePackage{zref-user}
 \usetikzlibrary{calc}
 
+\ExplSyntaxOn
+
 % Review Margin Configuration
 \newlength{\reviewmarginwidth}
 
-\newcommand{\setreviewmarginwidth}[1]{
+\cs_new_protected:Nn \__comm_set_review_margin_width:n {
+  \bool_if:NF \g_comm_final_bool {
     \setlength{\reviewmarginwidth}{#1}
     \geometry{
         paperwidth=\dimexpr 8.5in + 2\reviewmarginwidth \relax,
@@ -186,12 +203,16 @@
         marginparwidth=\reviewmarginwidth,
         marginparsep=0.15in
     }
+  }
+}
+
+\NewDocumentCommand{\setreviewmarginwidth}{m}{
+  \__comm_set_review_margin_width:n { #1 }
 }
 
 % Set default width
-\setreviewmarginwidth{2.5in}
+\__comm_set_review_margin_width:n { 2.5in }
 
-\ExplSyntaxOn
 \int_new:N \g__comm_count_int
 \seq_new:N \l__comm_args_seq
 \tl_new:N \l__comm_body_tl
@@ -345,7 +366,9 @@
 }
 
 \AtBeginDocument{
-  \__comm_solve_elasticity:
+  \bool_if:NF \g_comm_final_bool {
+    \__comm_solve_elasticity:
+  }
 }
 
 % Helper to draw the marginal boxes
@@ -375,26 +398,31 @@
 
 % Render Note (shared positioning and line drawing logic)
 \cs_new_protected:Nn \__comm_render_note:n {
-  \int_gincr:N \g__comm_count_int
-  \int_set_eq:NN \l__comm_id_int \g__comm_count_int
-  
-  % Marker
-  \zsaveposy{commsrc-\int_use:N \l__comm_id_int}%
-  \zlabel{commsrcpage-\int_use:N \l__comm_id_int}%
-  \tikz[remember~picture,overlay,baseline]{
-    \node[anchor=base,inner~sep=0pt,outer~sep=0pt](commsrc-\int_use:N \l__comm_id_int){\strut};
-  }
+  \bool_if:NTF \g_comm_final_bool {
+    \tl_if_blank:nF { \l__comm_target_tl } {
+      \l__comm_target_tl
+    }
+  }{
+    \int_gincr:N \g__comm_count_int
+    \int_set_eq:NN \l__comm_id_int \g__comm_count_int
+    
+    % Marker
+    \zsaveposy{commsrc-\int_use:N \l__comm_id_int}%
+    \zlabel{commsrcpage-\int_use:N \l__comm_id_int}%
+    \tikz[remember~picture,overlay,baseline]{
+      \node[anchor=base,inner~sep=0pt,outer~sep=0pt](commsrc-\int_use:N \l__comm_id_int){\strut};
+    }
 
-  % Measure box height of the comment
-  \bool_set_eq:NN \l_comm_save_first_bool \l_comm_first_reply_bool
-  \vbox_set:Nn \l_comm_scratch_box {
-    \__comm_draw_box:Vn \l__comm_body_tl { \int_use:N \l__comm_id_int }
-  }
-  \bool_gset_eq:NN \l_comm_first_reply_bool \l_comm_save_first_bool
-  \dim_set:Nn \l_comm_box_height_dim { \box_ht:N \l_comm_scratch_box + \box_dp:N \l_comm_scratch_box }
+    % Measure box height of the comment
+    \bool_set_eq:NN \l_comm_save_first_bool \l_comm_first_reply_bool
+    \vbox_set:Nn \l_comm_scratch_box {
+      \__comm_draw_box:Vn \l__comm_body_tl { \int_use:N \l__comm_id_int }
+    }
+    \bool_gset_eq:NN \l_comm_first_reply_bool \l_comm_save_first_bool
+    \dim_set:Nn \l_comm_box_height_dim { \box_ht:N \l_comm_scratch_box + \box_dp:N \l_comm_scratch_box }
 
-  % Detect position and write to aux (for next run)
-  \begin{tikzpicture}[remember~picture, overlay]
+    % Detect position and write to aux (for next run)
+    \begin{tikzpicture}[remember~picture, overlay]
     \path (commsrc-\int_use:N \l__comm_id_int.center); \pgfgetlastxy{\xn}{\yn}
     \path (current~page.center); \pgfgetlastxy{\xc}{\yc}
     \dim_compare:nNnTF { \xn } < { \xc } {
@@ -459,6 +487,7 @@
       \fi
     \end{tikzpicture}
   }
+}
 }
 
 % Core alternating processing logic

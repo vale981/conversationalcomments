@@ -2,6 +2,11 @@
 
 A \LaTeX\ interface for margin comments linked to highlighted document text. It supports commentator registration, alternating threads, and multi-author conversation blocks.
 
+## Package Options
+
+- `draft` (default): Enables comments, highlights, and geometry adjustments.
+- `final`: Disables all comments and highlights, restoring the original document geometry.
+
 ## Distribution Structure
 
 This package is distributed as a documented \LaTeX\ (`.dtx`) and installation batch (`.ins`) pair:
