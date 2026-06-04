@@ -193,17 +193,35 @@
 \DeclareOption{final}{\bool_gset_true:N \g_comm_final_bool}
 \ExecuteOptions{draft}
 \ProcessOptions\relax
+
+% Capture original page geometry before any changes (only if not final)
+\bool_if:NTF \g_comm_final_bool {
+  \ExplSyntaxOff
+}{
+  \dim_new:N \g__comm_orig_paperwidth_dim
+  \dim_new:N \g__comm_orig_paperheight_dim
+  \dim_new:N \g__comm_orig_textwidth_dim
+  \dim_new:N \g__comm_orig_textheight_dim
+
+  \ExplSyntaxOff
+  \g__comm_orig_paperwidth_dim=\paperwidth
+  \g__comm_orig_paperheight_dim=\paperheight
+  \g__comm_orig_textwidth_dim=\textwidth
+  \g__comm_orig_textheight_dim=\textheight
+
+  \RequirePackage{xcolor}
+  \RequirePackage{geometry}
+  \RequirePackage{marginnote}
+  \RequirePackage{tikz}
+  \RequirePackage{zref-savepos}
+  \RequirePackage{zref-abspage}
+  \RequirePackage{zref-user}
+  \usetikzlibrary{calc}
+  \ExplSyntaxOn
+}
 \ExplSyntaxOff
 
-\RequirePackage{xcolor}
-\RequirePackage{geometry}
-\RequirePackage{marginnote}
 \RequirePackage{xparse}
-\RequirePackage{tikz}
-\RequirePackage{zref-savepos}
-\RequirePackage{zref-abspage}
-\RequirePackage{zref-user}
-\usetikzlibrary{calc}
 
 \ExplSyntaxOn
 
@@ -214,12 +232,14 @@
   \bool_if:NF \g_comm_final_bool {
     \setlength{\reviewmarginwidth}{#1}
     \geometry{
-        paperwidth=\dimexpr 8.5in + 2\reviewmarginwidth \relax,
-        left=\dimexpr 0.75in + \reviewmarginwidth \relax,
-        right=\dimexpr 0.75in + \reviewmarginwidth \relax,
-        top=1in, bottom=1in,
+        paperwidth=\dimexpr \g__comm_orig_paperwidth_dim + 2\reviewmarginwidth \relax,
+        paperheight=\g__comm_orig_paperheight_dim,
+        textwidth=\g__comm_orig_textwidth_dim,
+        textheight=\g__comm_orig_textheight_dim,
         marginparwidth=\reviewmarginwidth,
-        marginparsep=0.15in
+        marginparsep=0.15in,
+        hcentering,
+        vcentering
     }
   }
 }
