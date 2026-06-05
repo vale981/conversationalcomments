@@ -490,7 +490,7 @@
 
     % Measure box height of the comment and cache the typeset box
     \bool_set_eq:NN \l_comm_save_first_bool \l_comm_first_reply_bool
-    \vbox_set:Nn \l_comm_render_box {
+    \hbox_set:Nn \l_comm_render_box {
       \__comm_draw_box:Vn \l__comm_body_tl { \int_use:N \l__comm_id_int }
     }
     \bool_gset_eq:NN \l_comm_first_reply_bool \l_comm_save_first_bool
@@ -507,8 +507,8 @@
     }
     \iow_now:Nx \@auxout {
       \exp_not:N \expandafter \exp_not:N \gdef \exp_not:N \csname commside \int_use:N \l__comm_id_int \exp_not:N \endcsname { \l_tmpa_tl }
-      \exp_not:N \commrecord { \int_use:N \l__comm_id_int } { \thepage } { \zposy{commsrc-\int_use:N \l__comm_id_int}sp } { \the\l_comm_box_height_dim }
-      \exp_not:N \commreportentry { \int_use:N \l__comm_id_int } { \thepage } { \tl_to_str:N \l__comm_initiator_tl } { \tl_to_str:N \l__comm_initiator_color_tl } { \tl_to_str:N \l__comm_target_tl } { \exp_not:V \l__comm_snippet_tl } { \l_comm_state_tl }
+      \exp_not:N \commrecord { \int_use:N \l__comm_id_int } { \zref@extractdefault { commsrcpage-\int_use:N \l__comm_id_int } { abspage } { \thepage } } { \zposy{commsrc-\int_use:N \l__comm_id_int}sp } { \the\l_comm_box_height_dim }
+      \exp_not:N \commreportentry { \int_use:N \l__comm_id_int } { \zref@extractdefault { commsrcpage-\int_use:N \l__comm_id_int } { abspage } { \thepage } } { \tl_to_str:N \l__comm_initiator_tl } { \tl_to_str:N \l__comm_initiator_color_tl } { \tl_to_str:N \l__comm_target_tl } { \exp_not:V \l__comm_snippet_tl } { \l_comm_state_tl }
     }
   \end{tikzpicture}
 
