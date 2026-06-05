@@ -488,13 +488,13 @@
       \node[anchor=base,inner~sep=0pt,outer~sep=0pt](commsrc-\int_use:N \l__comm_id_int){\strut};
     }
 
-    % Measure box height of the comment
+    % Measure box height of the comment and cache the typeset box
     \bool_set_eq:NN \l_comm_save_first_bool \l_comm_first_reply_bool
-    \vbox_set:Nn \l_comm_scratch_box {
+    \vbox_set:Nn \l_comm_render_box {
       \__comm_draw_box:Vn \l__comm_body_tl { \int_use:N \l__comm_id_int }
     }
     \bool_gset_eq:NN \l_comm_first_reply_bool \l_comm_save_first_bool
-    \dim_set:Nn \l_comm_box_height_dim { \box_ht:N \l_comm_scratch_box + \box_dp:N \l_comm_scratch_box }
+    \dim_set:Nn \l_comm_box_height_dim { \box_ht:N \l_comm_render_box + \box_dp:N \l_comm_render_box }
 
     % Detect position and write to aux (for next run)
     \begin{tikzpicture}[remember~picture, overlay]
@@ -530,10 +530,10 @@
     \dim_set:Nn \l_comm_shift_dim { 0pt }
   }
 
-  % Placement in margin with shift
+  % Placement in margin with shift (reuse the cached typeset box)
   \use:x {
     \exp_not:N \marginnote 
-      { \exp_not:N \__comm_draw_box:Vn \exp_not:N \l__comm_body_tl { \int_use:N \l__comm_id_int } } 
+      { \exp_not:N \box_use_drop:N \exp_not:N \l_comm_render_box } 
       [ \dim_eval:n { #1 + \l_comm_shift_dim } ]
   }
   
@@ -572,6 +572,7 @@
 \cs_generate_variant:Nn \prop_get:NnN { NoN }
 
 \box_new:N \l_comm_scratch_box
+\box_new:N \l_comm_render_box
 
 % Public evaluation macro for a reply
 \NewDocumentCommand{\commreply}{m m}{
