@@ -10,10 +10,12 @@ A \LaTeX\ interface for margin comments linked to highlighted document text. It 
 ## Conversation Resolution and Reporting
 
 - **Starred variant:** Commentator commands and the `\conversation` block support a starred variant (e.g., `\bill*`, `\conversation*`) to mark a thread as resolved. Resolved comments display a gray `[Resolved]` prefix in the margin.
+- **Plus modifier:** They also support a plus modifier (e.g., `\bill+`, `\conversation+`) to mark a thread as needing review. This displays an orange `[To Review]` prefix in the margin.
 - **Reporting macro:** Use `\printconversations[filter]` to render a hyperlinked summary report of conversations with links back to the text:
   - `\printconversations` (or `\printconversations[unresolved]`): Lists unresolved conversations.
-  - `\printconversations[all]`: Lists both resolved and unresolved conversations.
+  - `\printconversations[all]`: Lists all conversations.
   - `\printconversations[resolved]`: Lists resolved conversations.
+  - `\printconversations[to_review]` (or `[to-review]`): Lists conversations marked as to-review.
 
 ## Distribution Structure
 

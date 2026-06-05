@@ -150,6 +150,11 @@
 % \subsection{Conversation Resolution and Reporting}
 % All commentator macros and the \cs{conversation} environment support a starred variant (e.g., \cs{bill*}, \cs{conversation*}) to mark a conversation as resolved. Resolved comments are labeled with a \texttt{[Resolved]} prefix in the margin.
 %
+% Additionally, they support a plus modifier (e.g., \cs{bill+}, \cs{conversation+}) to mark a thread as needing review. This displays an orange \texttt{[To Review]} label in the margin.
+%
+% Here is a live example of a comment marked as needing review:
+% \bill+{This text needs another look}{Please double check the wording here.}
+%
 % \DescribeMacro{\printconversations}
 % Use the \cs{printconversations} macro to generate a hyperlinked summary report of all conversations in the document:
 % \begin{verbatim}
@@ -158,12 +163,16 @@
 % Supported filter arguments are:
 % \begin{itemize}
 %   \item \texttt{unresolved} (default): Prints unresolved conversations.
-%   \item \texttt{all}: Prints both resolved and unresolved conversations.
+%   \item \texttt{all}: Prints all conversations.
 %   \item \texttt{resolved}: Prints resolved conversations.
+%   \item \texttt{to-review} (or \texttt{to\_review}): Prints conversations marked as to-review.
 % \end{itemize}
 %
 % Here is a live demonstration of the summary report listing all conversations currently in this manual:
 % \printconversations[all]
+%
+% And here is a filtered report containing only conversations in the to-review state:
+% \printconversations[to-review]
 %
 % \subsection{Elastic Overlap Prevention (Repulsion)}
 %
@@ -272,6 +281,8 @@
 \bool_new:N \l_comm_save_first_bool
 \bool_new:N \l_comm_valid_coords_bool
 \bool_new:N \l_comm_resolved_bool
+\tl_new:N \l_comm_state_tl
+\tl_new:N \g_comm_current_state_tl
 \bool_new:N \l_comm_should_print_bool
 \seq_new:N \g_comm_report_seq
 
@@ -445,8 +456,11 @@
     ] (commdest-#2) {%
       \bool_set_true:N \l_comm_in_conversation_bool%
       \setlength{\parindent}{0pt}%
-      \bool_if:NT \l_comm_resolved_bool {
+      \str_if_eq:VnT \l_comm_state_tl { resolved } {
         \textcolor{gray}{\textbf{[Resolved]}} \par\vspace{2pt}
+      }
+      \str_if_eq:VnT \l_comm_state_tl { to_review } {
+        \textcolor{orange}{\textbf{[To Review]}} \par\vspace{2pt}
       }
       \ignorespaces #1%
     };
@@ -494,7 +508,7 @@
     \iow_now:Nx \@auxout {
       \exp_not:N \expandafter \exp_not:N \gdef \exp_not:N \csname commside \int_use:N \l__comm_id_int \exp_not:N \endcsname { \l_tmpa_tl }
       \exp_not:N \commrecord { \int_use:N \l__comm_id_int } { \thepage } { \zposy{commsrc-\int_use:N \l__comm_id_int}sp } { \the\l_comm_box_height_dim }
-      \exp_not:N \commreportentry { \int_use:N \l__comm_id_int } { \thepage } { \tl_to_str:N \l__comm_initiator_tl } { \tl_to_str:N \l__comm_initiator_color_tl } { \tl_to_str:N \l__comm_target_tl } { \exp_not:V \l__comm_snippet_tl } { \bool_if:NTF \l_comm_resolved_bool { true } { false } }
+      \exp_not:N \commreportentry { \int_use:N \l__comm_id_int } { \thepage } { \tl_to_str:N \l__comm_initiator_tl } { \tl_to_str:N \l__comm_initiator_color_tl } { \tl_to_str:N \l__comm_target_tl } { \exp_not:V \l__comm_snippet_tl } { \l_comm_state_tl }
     }
   \end{tikzpicture}
 
@@ -644,27 +658,48 @@
   \prop_gput:Nnn \g_comm_commentators_prop { #1/partner } { #4 }
 
   % Main alternating command: \<id> (e.g. \bill)
-  \exp_args:Nc \NewDocumentCommand { #1 } { s m +g +g +g +g +g +g O{0pt} } {%
+  \exp_args:Nc \NewDocumentCommand { #1 } { s t+ } {%
     \bool_if:NTF \l_comm_in_conversation_bool {%
-      % Inside a conversation: act as inline reply (format first argument)
-      \use:c { #1 reply } { ##2 }%
+      \bool_if:NTF ##1 {%
+        \use:c { #1 reply } { * }%
+      }{%
+        \bool_if:NTF ##2 {%
+          \use:c { #1 reply } { + }%
+        }{%
+          \use:c { __comm_reply_only_ #1 }%
+        }%
+      }%
     }{%
       % Thread starter
       \bool_if:NTF ##1 {
-        \bool_set_true:N \l_comm_resolved_bool
+        \tl_gset:Nn \g_comm_current_state_tl { resolved }
       }{
-        \bool_set_false:N \l_comm_resolved_bool
+        \bool_if:NTF ##2 {
+          \tl_gset:Nn \g_comm_current_state_tl { to_review }
+        }{
+          \tl_gset:Nn \g_comm_current_state_tl { unresolved }
+        }
       }
-      \seq_clear:N \l__comm_args_seq%
-      \seq_put_right:Nn \l__comm_args_seq { ##2 }%
-      \IfValueT { ##3 } { \seq_put_right:Nn \l__comm_args_seq { ##3 } }%
-      \IfValueT { ##4 } { \seq_put_right:Nn \l__comm_args_seq { ##4 } }%
-      \IfValueT { ##5 } { \seq_put_right:Nn \l__comm_args_seq { ##5 } }%
-      \IfValueT { ##6 } { \seq_put_right:Nn \l__comm_args_seq { ##6 } }%
-      \IfValueT { ##7 } { \seq_put_right:Nn \l__comm_args_seq { ##7 } }%
-      \IfValueT { ##8 } { \seq_put_right:Nn \l__comm_args_seq { ##8 } }%
-      \__comm_process:nn { #1 } { ##9 }%
+      \use:c { __comm_impl_ #1 }%
     }%
+  }
+
+  \exp_args:Nc \NewDocumentCommand { __comm_reply_only_ #1 } { m } {%
+    \use:c { #1 reply } { ##1 }%
+  }
+
+  % The internal implementation command parses the rest of the arguments
+  \exp_args:Nc \NewDocumentCommand { __comm_impl_ #1 } { m +g +g +g +g +g +g O{0pt} } {%
+    \tl_set_eq:NN \l_comm_state_tl \g_comm_current_state_tl
+    \seq_clear:N \l__comm_args_seq%
+    \seq_put_right:Nn \l__comm_args_seq { ##1 }%
+    \IfValueT { ##2 } { \seq_put_right:Nn \l__comm_args_seq { ##2 } }%
+    \IfValueT { ##3 } { \seq_put_right:Nn \l__comm_args_seq { ##3 } }%
+    \IfValueT { ##4 } { \seq_put_right:Nn \l__comm_args_seq { ##4 } }%
+    \IfValueT { ##5 } { \seq_put_right:Nn \l__comm_args_seq { ##5 } }%
+    \IfValueT { ##6 } { \seq_put_right:Nn \l__comm_args_seq { ##6 } }%
+    \IfValueT { ##7 } { \seq_put_right:Nn \l__comm_args_seq { ##7 } }%
+    \__comm_process:nn { #1 } { ##8 }%
   }
 
   % Inline formatter: \<id>reply (e.g. \billreply)
@@ -693,23 +728,32 @@
   \__comm_add_report_entry:nnnnnnn { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 }
 }
 
-% Multi-author explicit conversation command
-\NewDocumentCommand{\conversation}{s m +m O{0pt}}{
-  \group_begin:
+% Multi-author explicit conversation command wrapper to parse * and +
+\NewDocumentCommand{\conversation}{s t+}{
   \bool_if:NTF #1 {
-    \bool_set_true:N \l_comm_resolved_bool
+    \tl_gset:Nn \g_comm_current_state_tl { resolved }
   }{
-    \bool_set_false:N \l_comm_resolved_bool
+    \bool_if:NTF #2 {
+      \tl_gset:Nn \g_comm_current_state_tl { to_review }
+    }{
+      \tl_gset:Nn \g_comm_current_state_tl { unresolved }
+    }
   }
+  \__comm_impl_conversation
+}
+
+\NewDocumentCommand{\__comm_impl_conversation}{m +m O{0pt}}{
+  \group_begin:
+  \tl_set_eq:NN \l_comm_state_tl \g_comm_current_state_tl
   \bool_gset_true:N \l_comm_first_reply_bool
-  \tl_set:Nn \l__comm_target_tl { #2 }
-  \tl_set:Nn \l__comm_body_tl { #3 }
+  \tl_set:Nn \l__comm_target_tl { #1 }
+  \tl_set:Nn \l__comm_body_tl { #2 }
   \tl_trim_spaces:N \l__comm_body_tl
   \tl_set:Nn \l__comm_color_tl { gray } % Neutral rim for multi-author
   \tl_set:Nn \l__comm_initiator_tl { Group }
   \tl_set:Nn \l__comm_initiator_color_tl { gray }
   \tl_set_eq:NN \l__comm_snippet_tl \l__comm_body_tl
-  \__comm_render_note:n { #4 }
+  \__comm_render_note:n { #3 }
   \group_end:
 }
 
@@ -723,13 +767,30 @@
   \tl_set:Nn \l_curr_filter_tl { #8 }
   \bool_set_true:N \l_comm_should_print_bool
   
+  \tl_set:Nn \l_curr_state_tl { #7 }
+  % Normalize old true/false values for backwards compatibility
+  \str_if_eq:eeT { \l_curr_state_tl } { true } { \tl_set:Nn \l_curr_state_tl { resolved } }
+  \str_if_eq:eeT { \l_curr_state_tl } { false } { \tl_set:Nn \l_curr_state_tl { unresolved } }
+  
   \str_if_eq:VnT \l_curr_filter_tl { unresolved } {
-    \str_if_eq:eeT { #7 } { true } {
+    \str_if_eq:eeF { \l_curr_state_tl } { unresolved } {
       \bool_set_false:N \l_comm_should_print_bool
     }
   }
   \str_if_eq:VnT \l_curr_filter_tl { resolved } {
-    \str_if_eq:eeT { #7 } { false } {
+    \str_if_eq:eeF { \l_curr_state_tl } { resolved } {
+      \bool_set_false:N \l_comm_should_print_bool
+    }
+  }
+  
+  % Check if filter is to_review/to-review
+  \bool_set_false:N \l_tmpa_bool
+  \str_if_eq:VnT \l_curr_filter_tl { to_review } { \bool_set_true:N \l_tmpa_bool }
+  \str_if_eq:VnT \l_curr_filter_tl { to-review } { \bool_set_true:N \l_tmpa_bool }
+  \str_if_eq:VnT \l_curr_filter_tl { to~review } { \bool_set_true:N \l_tmpa_bool }
+  
+  \bool_if:NT \l_tmpa_bool {
+    \str_if_eq:eeF { \l_curr_state_tl } { to_review } {
       \bool_set_false:N \l_comm_should_print_bool
     }
   }
@@ -738,10 +799,14 @@
     \vspace{8pt}
     \noindent
     \hyperlink{commsrc-#1}{\textbf{[\##1]}}~on~page~\hyperlink{commsrc-#1}{#2}~~---~~%
-    \str_if_eq:eeTF { #7 } { true } {
+    \str_if_eq:eeTF { \l_curr_state_tl } { resolved } {
       \textcolor{gray}{\textbf{[Resolved]}}
     }{
-      \textcolor{red}{\textbf{[Unresolved]}}
+      \str_if_eq:eeTF { \l_curr_state_tl } { to_review } {
+        \textcolor{orange}{\textbf{[To Review]}}
+      }{
+        \textcolor{red}{\textbf{[Unresolved]}}
+      }
     }
     \par\vspace{3pt}
     \tl_if_blank:nF { #5 } {
