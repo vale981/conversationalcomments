@@ -174,6 +174,21 @@
 % And here is a filtered report containing only conversations in the to-review state:
 % \printconversations[to-review]
 %
+% \subsection{Creation Dates and Timestamps (Sidecar)}
+% The package stores comment creation dates and times in a sidecar file named \texttt{\string\jobname.commtimestamps}. This file can be committed to version control to preserve the record of review conversations.
+%
+% \subsubsection{MD5 Hashing}
+% The package decouples the displayed comment reference numbers (e.g., \texttt{[\#1]}) from the sidecar storage identifiers. Each comment thread is assigned a 128-bit MD5 hash computed from the commentator ID and the highlighted target text of the document.
+%
+% \subsubsection{Reply Timestamps}
+% Each reply inside a thread is assigned a content-dependent key based on the author name and the reply text. If the body text of a reply is edited, its key changes, updating its timestamp to the current compilation time. Unedited replies in the thread preserve their original timestamps.
+%
+% \subsubsection{Package Configuration}
+% Timestamps can be disabled using the package option \texttt{notimestamps}:
+% \begin{verbatim}
+%   \usepackage[notimestamps]{conversationalcomments}
+% \end{verbatim}
+%
 % \subsection{Elastic Overlap Prevention (Repulsion)}
 %
 % When multiple comment boxes are placed on consecutive or nearby lines, standard margin notes would overlap.
@@ -197,10 +212,14 @@
 \RequirePackage{expl3}
 \ExplSyntaxOn
 \bool_new:N \g_comm_final_bool
+\bool_new:N \g_comm_timestamps_bool
+\bool_gset_true:N \g_comm_timestamps_bool
 
 \DeclareOption{draft}{\bool_gset_false:N \g_comm_final_bool}
 \DeclareOption{final}{\bool_gset_true:N \g_comm_final_bool}
-\ExecuteOptions{draft}
+\DeclareOption{timestamps}{\bool_gset_true:N \g_comm_timestamps_bool}
+\DeclareOption{notimestamps}{\bool_gset_false:N \g_comm_timestamps_bool}
+\ExecuteOptions{draft,timestamps}
 \ProcessOptions\relax
 
 % Capture original page geometry before any changes (only if not final)
@@ -225,6 +244,7 @@
   \RequirePackage{zref-savepos}
   \RequirePackage{zref-abspage}
   \RequirePackage{zref-user}
+  \RequirePackage[calc,showseconds=false]{datetime2}
   \usetikzlibrary{calc}
   \ExplSyntaxOn
 }
@@ -261,6 +281,189 @@
 \__comm_set_review_margin_width:n { 2.5in }
 
 \int_new:N \g__comm_count_int
+
+% Fully expandable helpers to extract clean integers from pdfTeX's \pdfcreationdate
+\cs_new:Npn \__comm_parse_tz_hour:w #1 #2 #3 #4 #5 #6 #7 #8 #9 {
+  \__comm_parse_tz_hour_tz:w
+}
+\cs_new:Npn \__comm_parse_tz_hour_tz:w #1 #2 #3 #4 #5 #6 #7 #8 \q_stop {
+  \str_if_eq:eeTF { \tl_to_str:n { #8 } } { Z } {
+    0
+  }{
+    \__comm_parse_tz_hh_hour:w #8 \q_stop
+  }
+}
+\cs_new:Npn \__comm_parse_tz_hh_hour:w #1 #2 #3 #4 #5 #6 #7 \q_stop {
+  #1 #2 #3
+}
+
+\cs_new:Npn \__comm_parse_tz_minute:w #1 #2 #3 #4 #5 #6 #7 #8 #9 {
+  \__comm_parse_tz_minute_tz:w
+}
+\cs_new:Npn \__comm_parse_tz_minute_tz:w #1 #2 #3 #4 #5 #6 #7 #8 \q_stop {
+  \str_if_eq:eeTF { \tl_to_str:n { #8 } } { Z } {
+    0
+  }{
+    \__comm_parse_tz_mm_minute:w #8 \q_stop
+  }
+}
+\cs_new:Npn \__comm_parse_tz_mm_minute:w #1 #2 #3 #4 #5 #6 #7 \q_stop {
+  #5 #6
+}
+
+\int_new:N \g_comm_sys_tz_hour_int
+\int_new:N \g_comm_sys_tz_minute_int
+
+\int_gset:Nn \g_comm_sys_tz_hour_int {
+  \cs_if_exist:NTF \pdfcreationdate {
+    \exp_after:wN \__comm_parse_tz_hour:w \pdfcreationdate \q_stop
+  }{
+    0
+  }
+}
+
+\int_gset:Nn \g_comm_sys_tz_minute_int {
+  \cs_if_exist:NTF \pdfcreationdate {
+    \exp_after:wN \__comm_parse_tz_minute:w \pdfcreationdate \q_stop
+  }{
+    0
+  }
+}
+
+% Helper to format a safe timezone offset as a valid ISO-8601 string (+HH:MM or -HH:MM)
+\cs_new:Npn \__comm_format_tz:nn #1 #2 {
+  \int_compare:nNnTF { #1 } < { 0 } {
+    % Negative offset
+    -
+    \int_compare:nNnT { #1 } > { -10 } { 0 }
+    \int_eval:n { \int_abs:n { #1 } }
+  }{
+    % Positive offset
+    +
+    \int_compare:nNnT { #1 } < { 10 } { 0 }
+    \int_eval:n { #1 }
+  }
+  \c_colon_str
+  \int_compare:nNnT { #2 } < { 10 } { 0 }
+  \int_eval:n { \int_abs:n { #2 } }
+}
+
+% Helper to get current datetime as a standard, fully expandable ISO-8601 string
+\cs_new:Npn \__comm_current_iso_timestamp: {
+  \int_if_exist:cTF { c_sys_year_int } {
+    \int_use:N \c_sys_year_int -
+    \int_compare:nNnT { \c_sys_month_int } < { 10 } { 0 }
+    \int_use:N \c_sys_month_int -
+    \int_compare:nNnT { \c_sys_day_int } < { 10 } { 0 }
+    \int_use:N \c_sys_day_int T
+    \int_compare:nNnT { \c_sys_hour_int } < { 10 } { 0 }
+    \int_use:N \c_sys_hour_int \c_colon_str
+    \int_compare:nNnT { \c_sys_minute_int } < { 10 } { 0 }
+    \int_use:N \c_sys_minute_int \c_colon_str 00
+    \__comm_format_tz:nn 
+      { \g_comm_sys_tz_hour_int }
+      { \g_comm_sys_tz_minute_int }
+  }{
+    \int_use:N \year -
+    \int_compare:nNnT { \month } < { 10 } { 0 }
+    \int_use:N \month -
+    \int_compare:nNnT { \day } < { 10 } { 0 }
+    \int_use:N \day T
+    \int_compare:nNnT { \numexpr \time / 60 \relax } < { 10 } { 0 }
+    \int_use:N \numexpr \time / 60 \relax \c_colon_str
+    \int_compare:nNnT { \numexpr \time - (\time / 60) * 60 \relax } < { 10 } { 0 }
+    \int_use:N \numexpr \time - (\time / 60) * 60 \relax \c_colon_str 00
+    \__comm_format_tz:nn 
+      { \g_comm_sys_tz_hour_int }
+      { \g_comm_sys_tz_minute_int }
+  }
+}
+
+% Helper to format the current date and time using standard datetime2 package
+\cs_new:Npn \__comm_format_datetime: {
+  \__comm_current_iso_timestamp:
+}
+
+% Protected helper to parse an ISO-8601 timestamp, convert it to local timezone, and print
+\cs_new_protected:Nn \__comm_render_local_datetime:n {
+  \quark_if_no_value:nTF { #1 } {
+    [No~Date]
+  }{
+    \tl_if_blank:nTF { #1 } {
+      [No~Date]
+    }{
+      \tl_set:Nn \l_tmpa_tl { #1 }
+      \tl_if_in:NnTF \l_tmpa_tl { T } {
+        \str_range:nnn { #1 } { 1 } { 10 }
+        \c_space_tl
+        \str_range:nnn { #1 } { 12 } { 16 }
+      }{
+        \l_tmpa_tl
+      }
+    }
+  }
+}
+\cs_generate_variant:Nn \__comm_render_local_datetime:n { V }
+
+% Save current compiler/system time globally at the start of document
+\AtBeginDocument{
+  \DTMsavenow{comm_now_global}
+}
+
+% Persistent Sidecar Timestamps Configuration
+\prop_new:N \g_comm_loaded_timestamps_prop
+\prop_new:N \g_comm_resolved_timestamps_prop
+\tl_new:N \l_comm_timestamp_tl
+\tl_new:N \l_comm_reply_timestamp_tl
+\tl_new:N \l_comm_reply_hash_tl
+\tl_new:N \l_comm_current_thread_hash_tl
+\int_new:N \l_comm_reply_idx_int
+\iow_new:N \g_comm_timestamps_iow
+\cs_generate_variant:Nn \prop_gput:Nnn { Nno, Nxx }
+\cs_generate_variant:Nn \prop_get:NnN { NxN }
+\cs_generate_variant:Nn \str_range:nnn { Vnn }
+
+\cs_new_protected:Nn \__comm_parse_and_store_timestamp:nn {
+  \tl_set:Nn \l_tmpa_tl { #2 }
+  \tl_if_blank:nTF { #2 } {
+    \prop_gput:Nnn \g_comm_loaded_timestamps_prop { #1 } { [No~Date] }
+  }{
+    \tl_if_in:NnTF \l_tmpa_tl { T } {
+      \DTMsavetimestamp{comm_temp_time}{#2}
+      \DTMtozulu{comm_temp_time}{comm_zulu_time}
+      \DTMsaveaszulutime{comm_local_time}
+        {\DTMfetchyear{comm_zulu_time}}
+        {\DTMfetchmonth{comm_zulu_time}}
+        {\DTMfetchday{comm_zulu_time}}
+        {\DTMfetchhour{comm_zulu_time}}
+        {\DTMfetchminute{comm_zulu_time}}
+        {0}
+        {\g_comm_sys_tz_hour_int}
+        {\g_comm_sys_tz_minute_int}
+      % Generate the clean local formatted string
+      \tl_set:Nx \l_tmpb_tl {
+        \DTMfetchyear{comm_local_time} -
+        \DTMfetchmonth{comm_local_time} -
+        \DTMfetchday{comm_local_time} \c_space_tl
+        \DTMfetchhour{comm_local_time} \c_colon_str
+        \DTMfetchminute{comm_local_time}
+      }
+      \prop_gput:Nno \g_comm_loaded_timestamps_prop { #1 } { \l_tmpb_tl }
+    }{
+      \prop_gput:Nnn \g_comm_loaded_timestamps_prop { #1 } { #2 }
+    }
+  }
+}
+
+\NewDocumentCommand{\setcommenttimestamp}{m m}{
+  \__comm_parse_and_store_timestamp:nn { #1 } { #2 }
+}
+
+\file_if_exist:nT { \jobname.commtimestamps } {
+  \ExplSyntaxOff
+  \file_input:n { \jobname.commtimestamps }
+  \ExplSyntaxOn
+}
 \seq_new:N \l__comm_args_seq
 \tl_new:N \l__comm_body_tl
 \tl_new:N \l__comm_color_tl
@@ -269,6 +472,7 @@
 \tl_new:N \l__comm_initiator_tl
 \tl_new:N \l__comm_initiator_color_tl
 \tl_new:N \l__comm_snippet_tl
+\tl_new:N \l_comm_formatted_timestamp_tl
 \prop_new:N \l_comm_replies_prop
 \int_new:N \l_comm_replies_count
 \tl_new:N \l_author_tl
@@ -439,8 +643,9 @@
 }
 
 % Helper to draw the marginal boxes
-\cs_new_protected:Nn \__comm_draw_box:nn {
+\cs_new_protected:Nn \__comm_draw_box:nnn {
   \group_begin:
+  \int_set:Nn \l_comm_reply_idx_int { 0 }
   \noindent % Ensure no indent in the margin
   \zlabel{commdest-#2}%
   \begin{tikzpicture}[remember~picture, baseline=(commdest-#2.center)]
@@ -460,14 +665,18 @@
         \textcolor{gray}{\textbf{[Resolved]}} \par\vspace{2pt}
       }
       \str_if_eq:VnT \l_comm_state_tl { to_review } {
-        \textcolor{orange}{\textbf{[To Review]}} \par\vspace{2pt}
+        \textcolor{orange}{\textbf{[To~Review]}} \par\vspace{2pt}
       }
       \ignorespaces #1%
+      \bool_if:NT \g_comm_timestamps_bool {
+        \par\vspace{3pt}
+        \hfill{\tiny\textcolor{gray}{\__comm_render_local_datetime:n { #3 }}}%
+      }
     };
   \end{tikzpicture}
   \group_end:
 }
-\cs_generate_variant:Nn \__comm_draw_box:nn { Vn }
+\cs_generate_variant:Nn \__comm_draw_box:nnn { Vnn }
 
 % Render Note (shared positioning and line drawing logic)
 \cs_new_protected:Nn \__comm_render_note:n {
@@ -480,6 +689,20 @@
     \int_gincr:N \g__comm_count_int
     \int_set_eq:NN \l__comm_id_int \g__comm_count_int
     
+    % Compute stable MD5 hash for the comment thread (based on initiator and target text)
+    \tl_set:Nx \l_comm_current_thread_hash_tl {
+      \str_mdfive_hash:n {
+        \l__comm_initiator_tl / \l__comm_target_tl
+      }
+    }
+    
+    % Get or generate timestamp for this comment thread
+    \prop_get:NxN \g_comm_loaded_timestamps_prop { \l_comm_current_thread_hash_tl } \l_comm_timestamp_tl
+    \quark_if_no_value:NT \l_comm_timestamp_tl {
+      \tl_set:Nx \l_comm_timestamp_tl { \__comm_format_datetime: }
+    }
+    \prop_gput:Nxx \g_comm_resolved_timestamps_prop { \l_comm_current_thread_hash_tl } { \l_comm_timestamp_tl }
+    
     % Marker
     \zsaveposy{commsrc-\int_use:N \l__comm_id_int}%
     \zlabel{commsrcpage-\int_use:N \l__comm_id_int}%
@@ -491,7 +714,7 @@
     % Measure box height of the comment and cache the typeset box
     \bool_set_eq:NN \l_comm_save_first_bool \l_comm_first_reply_bool
     \hbox_set:Nn \l_comm_render_box {
-      \__comm_draw_box:Vn \l__comm_body_tl { \int_use:N \l__comm_id_int }
+      \__comm_draw_box:Vnn \l__comm_body_tl { \int_use:N \l__comm_id_int } { \l_comm_timestamp_tl }
     }
     \bool_gset_eq:NN \l_comm_first_reply_bool \l_comm_save_first_bool
     \dim_set:Nn \l_comm_box_height_dim { \box_ht:N \l_comm_render_box + \box_dp:N \l_comm_render_box }
@@ -508,7 +731,7 @@
     \iow_now:Nx \@auxout {
       \exp_not:N \expandafter \exp_not:N \gdef \exp_not:N \csname commside \int_use:N \l__comm_id_int \exp_not:N \endcsname { \l_tmpa_tl }
       \exp_not:N \commrecord { \int_use:N \l__comm_id_int } { \zref@extractdefault { commsrcpage-\int_use:N \l__comm_id_int } { abspage } { \thepage } } { \zposy{commsrc-\int_use:N \l__comm_id_int}sp } { \the\l_comm_box_height_dim }
-      \exp_not:N \commreportentry { \int_use:N \l__comm_id_int } { \zref@extractdefault { commsrcpage-\int_use:N \l__comm_id_int } { abspage } { \thepage } } { \tl_to_str:N \l__comm_initiator_tl } { \tl_to_str:N \l__comm_initiator_color_tl } { \tl_to_str:N \l__comm_target_tl } { \exp_not:V \l__comm_snippet_tl } { \l_comm_state_tl }
+      \exp_not:N \commreportentry { \int_use:N \l__comm_id_int } { \zref@extractdefault { commsrcpage-\int_use:N \l__comm_id_int } { abspage } { \thepage } } { \tl_to_str:N \l__comm_initiator_tl } { \tl_to_str:N \l__comm_initiator_color_tl } { \tl_to_str:N \l__comm_target_tl } { \exp_not:V \l__comm_snippet_tl } { \l_comm_state_tl } { \l_comm_timestamp_tl }
     }
   \end{tikzpicture}
 
@@ -711,7 +934,32 @@
     }{%
       \par\vspace{3pt}%
     }%
-    \textcolor { #3 } { \textbf { #2 : } ~ ##1 }%
+    \__comm_format_reply:nnnn { #1 } { #2 } { #3 } { ##1 }%
+  }
+}
+
+\cs_new_protected:Nn \__comm_format_reply:nnnn {
+  \int_incr:N \l_comm_reply_idx_int
+  
+  % Compute stable MD5 hash for the reply content (based on author and reply body)
+  \tl_set:Nx \l_comm_reply_hash_tl {
+    \str_mdfive_hash:n {
+      #1 / #2 / #4
+    }
+  }
+  
+  \prop_get:NxN \g_comm_loaded_timestamps_prop { \l_comm_current_thread_hash_tl / \l_comm_reply_hash_tl } \l_comm_reply_timestamp_tl
+  \quark_if_no_value:NT \l_comm_reply_timestamp_tl {
+    \tl_set:Nx \l_comm_reply_timestamp_tl { \__comm_format_datetime: }
+  }
+  \prop_gput:Nxx \g_comm_resolved_timestamps_prop { \l_comm_current_thread_hash_tl / \l_comm_reply_hash_tl } { \l_comm_reply_timestamp_tl }
+  
+  \textcolor { #3 } { 
+    \textbf { #2 }
+    \bool_if:NT \g_comm_timestamps_bool {
+      \textnormal{~\textcolor{gray}{\tiny~[ \__comm_render_local_datetime:V \l_comm_reply_timestamp_tl ]}}
+    }
+    \textbf { : }~#4
   }
 }
 
@@ -721,12 +969,12 @@
 }
 
 % Helper for adding report entries to the sequence
-\cs_new_protected:Nn \__comm_add_report_entry:nnnnnnn {
-  \seq_gput_right:Nn \g_comm_report_seq { { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 } }
+\cs_new_protected:Nn \__comm_add_report_entry:nnnnnnnn {
+  \seq_gput_right:Nn \g_comm_report_seq { { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 } { #8 } }
 }
 
-\NewDocumentCommand{\commreportentry}{m m m m m m m}{
-  \__comm_add_report_entry:nnnnnnn { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 }
+\NewDocumentCommand{\commreportentry}{m m m m m m m m}{
+  \__comm_add_report_entry:nnnnnnnn { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 } { #8 }
 }
 
 % Multi-author explicit conversation command wrapper to parse * and +
@@ -763,9 +1011,9 @@
 \providecommand{\hyperlink}[2]{#2}
 
 % Helper for rendering report entries
-\cs_new_protected:Nn \__comm_render_report_entry:nnnnnnnn {
+\cs_new_protected:Nn \__comm_render_report_entry:nnnnnnnnn {
   \group_begin:
-  \tl_set:Nn \l_curr_filter_tl { #8 }
+  \tl_set:Nn \l_curr_filter_tl { #9 }
   \bool_set_true:N \l_comm_should_print_bool
   
   \tl_set:Nn \l_curr_state_tl { #7 }
@@ -799,21 +1047,31 @@
   \bool_if:NT \l_comm_should_print_bool {
     \vspace{8pt}
     \noindent
+    \int_set:Nn \l__comm_id_int { #1 }
+    \int_set:Nn \l_comm_reply_idx_int { 0 }
+    \bool_set_true:N \l_comm_first_reply_bool
+    \tl_set:Nx \l_comm_current_thread_hash_tl {
+      \str_mdfive_hash:n {
+        #3 / #5
+      }
+    }
     \hyperlink{commsrc-#1}{\textbf{[\##1]}}~on~page~\hyperlink{commsrc-#1}{#2}~~---~~%
     \str_if_eq:eeTF { \l_curr_state_tl } { resolved } {
       \textcolor{gray}{\textbf{[Resolved]}}
     }{
       \str_if_eq:eeTF { \l_curr_state_tl } { to_review } {
-        \textcolor{orange}{\textbf{[To Review]}}
+        \textcolor{orange}{\textbf{[To~Review]}}
       }{
         \textcolor{red}{\textbf{[Unresolved]}}
       }
     }
     \par\vspace{3pt}
+    \bool_if:NT \g_comm_timestamps_bool {
+      \hspace*{1.5em}\textbf{Date:}~\texttt{\__comm_render_local_datetime:n { #8 }} \par\vspace{2pt}
+    }
     \tl_if_blank:nF { #5 } {
       \hspace*{1.5em}\textbf{Target:}~\texttt{\tl_to_str:n { #5 }} \par\vspace{2pt}
     }
-    \hspace*{1.5em}\textbf{Initiator:}~\textcolor{#4}{\textbf{#3}} \par\vspace{2pt}
     \hspace*{1.5em}\textbf{Comments:}~#6
     \par
   }
@@ -828,10 +1086,27 @@
     No~conversations~recorded.
   }{
     \seq_map_inline:Nn \g_comm_report_seq {
-      \__comm_render_report_entry:nnnnnnnn ##1 { #1 }
+      \__comm_render_report_entry:nnnnnnnnn ##1 { #1 }
     }
   }
   \group_end:
+}
+
+\cs_new_protected:Nn \__comm_write_timestamp:nn {
+  \iow_now:Nx \g_comm_timestamps_iow {
+    \exp_not:N \setcommenttimestamp { #1 } { #2 }
+  }
+}
+
+% Helper to write resolved timestamps to the sidecar file
+\cs_new_protected:Nn \__comm_write_timestamps_file: {
+  \iow_open:Nn \g_comm_timestamps_iow { \jobname.commtimestamps }
+  \prop_map_function:NN \g_comm_resolved_timestamps_prop \__comm_write_timestamp:nn
+  \iow_close:N \g_comm_timestamps_iow
+}
+
+\AtEndDocument{
+  \__comm_write_timestamps_file:
 }
 
 \ExplSyntaxOff
