@@ -776,7 +776,8 @@
       \exp_not:N \begin{tikzpicture}[remember~picture,overlay]
         \exp_not:N \path (commsrc-\int_use:N \l__comm_id_int.center); \exp_not:N \pgfgetlastxy{\exp_not:N \commxsrc}{\exp_not:N \commysrc}
         \exp_not:N \path (commdest-\int_use:N \l__comm_id_int.center); \exp_not:N \pgfgetlastxy{\exp_not:N \commxdest}{\exp_not:N \commydest}
-        \exp_not:N \ifdim \exp_not:N \commxdest > \exp_not:N \commxsrc
+        \exp_not:N \path (current~page.center); \exp_not:N \pgfgetlastxy{\exp_not:N \commxc}{\exp_not:N \commyc}
+        \exp_not:N \ifdim \exp_not:N \commxdest > \exp_not:N \commxc
           \exp_not:N \draw[semithick, \l__comm_line_color_tl, opacity=0.8] 
             ($(current~page.center |- commsrc-\int_use:N \l__comm_id_int.base) + (0.5*\exp_not:N \textwidth, 0)$) 
             -- (commdest-\int_use:N \l__comm_id_int.west);
