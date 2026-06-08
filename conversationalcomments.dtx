@@ -106,7 +106,7 @@
 % \begin{verbatim}
 %   \bill{highlighted text}{This text is blue, and this is my comment.}
 % \end{verbatim}
-% Here is a live example: \bill{this is a live text-linked comment}{This comment is rendered in the margin with a connecting line back to this text.}
+% Here is a live example: \bill{this is a brand new target text}{this is a brand new comment body edit!}
 %
 % \subsubsection{Standalone Notes}
 % To place a floating note in the margin without highlighting any body text, leave the first argument empty:
@@ -177,11 +177,13 @@
 % \subsection{Creation Dates and Timestamps (Sidecar)}
 % The package stores comment creation dates and times in a sidecar file named \texttt{\string\jobname.commtimestamps}. This file can be committed to version control to preserve the record of review conversations.
 %
-% \subsubsection{MD5 Hashing}
-% The package decouples the displayed comment reference numbers (e.g., \texttt{[\#1]}) from the sidecar storage identifiers. Each comment thread is assigned a 128-bit MD5 hash computed from the commentator ID and the highlighted target text of the document.
+% \subsubsection{Thread Timestamps}
+% The package decouples the displayed comment reference numbers (e.g., \texttt{[\#1]}) from the sidecar storage identifiers. Each comment thread is assigned a 128-bit MD5 hash computed solely from the commentator ID and the highlighted target text of the document. This ensures that the primary timestamp representing the thread's creation date remains static, even if subsequent comments or reply bodies within the thread are modified. If the highlighted target text is altered, a new thread hash is generated, resulting in an updated timestamp.
+% 
+% For standalone comments (where the target text is empty), the thread hash is calculated using the initiator's ID and an empty string. Multiple standalone comments by the same author will share this initial thread creation timestamp.
 %
 % \subsubsection{Reply Timestamps}
-% Each reply inside a thread is assigned a content-dependent key based on the author name and the reply text. If the body text of a reply is edited, its key changes, updating its timestamp to the current compilation time. Unedited replies in the thread preserve their original timestamps.
+% In contrast to thread timestamps, each individual reply within a thread is assigned a content-dependent key based on the author name and the specific reply text. Modifying the body text of a reply generates a new key, updating its timestamp to the current compilation time. Unedited replies preserve their original timestamps, allowing thread creation times and individual reply times to be tracked independently.
 %
 % \subsubsection{Package Configuration}
 % Timestamps can be disabled using the package option \texttt{notimestamps}:
@@ -381,10 +383,10 @@
     \int_use:N \month -
     \int_compare:nNnT { \day } < { 10 } { 0 }
     \int_use:N \day T
-    \int_compare:nNnT { \numexpr \time / 60 \relax } < { 10 } { 0 }
-    \int_use:N \numexpr \time / 60 \relax \c_colon_str
-    \int_compare:nNnT { \numexpr \time - (\time / 60) * 60 \relax } < { 10 } { 0 }
-    \int_use:N \numexpr \time - (\time / 60) * 60 \relax \c_colon_str 00
+    \int_compare:nNnT { \int_div_truncate:nn { \time } { 60 } } < { 10 } { 0 }
+    \int_eval:n { \int_div_truncate:nn { \time } { 60 } } \c_colon_str
+    \int_compare:nNnT { \int_mod:nn { \time } { 60 } } < { 10 } { 0 }
+    \int_eval:n { \int_mod:nn { \time } { 60 } } \c_colon_str 00
     \__comm_format_tz:nn 
       { \g_comm_sys_tz_hour_int }
       { \g_comm_sys_tz_minute_int }
@@ -455,6 +457,7 @@
 \cs_generate_variant:Nn \prop_gput:Nnn { Nno, Nxx }
 \cs_generate_variant:Nn \prop_get:NnN { NxN }
 \cs_generate_variant:Nn \str_range:nnn { Vnn }
+\prg_generate_conditional_variant:Nnn \tl_if_blank:n { o, V } { TF, T, F }
 
 \cs_new_protected:Nn \__comm_parse_and_store_timestamp:nn {
   \tl_set:Nn \l_tmpa_tl { #2 }
@@ -683,8 +686,10 @@
       }
       \ignorespaces #1%
       \bool_if:NT \g_comm_timestamps_bool {
-        \par\vspace{3pt}
-        \hfill{\tiny\textcolor{gray}{\__comm_render_local_datetime:n { #3 }}}%
+        \tl_if_blank:oF { \l__comm_target_tl } {
+          \par\vspace{3pt}
+          \hfill{\tiny\textcolor{gray}{\__comm_render_local_datetime:n { #3 }}}%
+        }
       }
     };
   \end{tikzpicture}
@@ -705,17 +710,21 @@
     
     % Compute stable MD5 hash for the comment thread (based on initiator and target text)
     \tl_set:Nx \l_comm_current_thread_hash_tl {
-      \str_mdfive_hash:n {
-        \l__comm_initiator_tl / \l__comm_target_tl
+      \str_mdfive_hash:e {
+       \l__comm_initiator_tl / \l__comm_target_tl
       }
     }
     
     % Get or generate timestamp for this comment thread
-    \prop_get:NxN \g_comm_loaded_timestamps_prop { \l_comm_current_thread_hash_tl } \l_comm_timestamp_tl
-    \quark_if_no_value:NT \l_comm_timestamp_tl {
-      \tl_set:Nx \l_comm_timestamp_tl { \__comm_format_datetime: }
+    \tl_if_blank:oTF { \l__comm_target_tl } {
+      \tl_clear:N \l_comm_timestamp_tl
+    }{
+      \prop_get:NxN \g_comm_loaded_timestamps_prop { \l_comm_current_thread_hash_tl } \l_comm_timestamp_tl
+      \quark_if_no_value:NT \l_comm_timestamp_tl {
+        \tl_set:Nx \l_comm_timestamp_tl { \__comm_format_datetime: }
+      }
+      \prop_gput:Nxx \g_comm_resolved_timestamps_prop { \l_comm_current_thread_hash_tl } { \l_comm_timestamp_tl }
     }
-    \prop_gput:Nxx \g_comm_resolved_timestamps_prop { \l_comm_current_thread_hash_tl } { \l_comm_timestamp_tl }
     
     % Marker
     \zsaveposy{commsrc-\int_use:N \l__comm_id_int}%
@@ -958,16 +967,16 @@
   
   % Compute stable MD5 hash for the reply content (based on author and reply body)
   \tl_set:Nx \l_comm_reply_hash_tl {
-    \str_mdfive_hash:n {
+    \str_mdfive_hash:e {
       #1 / #2 / #4
     }
   }
   
-  \prop_get:NxN \g_comm_loaded_timestamps_prop { \l_comm_current_thread_hash_tl / \l_comm_reply_hash_tl } \l_comm_reply_timestamp_tl
+  \prop_get:NxN \g_comm_loaded_timestamps_prop { \l_comm_reply_hash_tl } \l_comm_reply_timestamp_tl
   \quark_if_no_value:NT \l_comm_reply_timestamp_tl {
     \tl_set:Nx \l_comm_reply_timestamp_tl { \__comm_format_datetime: }
   }
-  \prop_gput:Nxx \g_comm_resolved_timestamps_prop { \l_comm_current_thread_hash_tl / \l_comm_reply_hash_tl } { \l_comm_reply_timestamp_tl }
+  \prop_gput:Nxx \g_comm_resolved_timestamps_prop {  \l_comm_reply_hash_tl } { \l_comm_reply_timestamp_tl }
   
   \textcolor { #3 } { 
     \textbf { #2 }
@@ -1024,6 +1033,14 @@
 % Helper for rendering report entries
 \cs_new_protected:Nn \__comm_render_report_entry:nnnnnnnnn {
   \group_begin:
+  \tl_set:Nx \l_comm_current_thread_hash_tl {
+    \str_mdfive_hash:e {
+      #3 / #5
+    }
+  }
+  \tl_if_blank:nF { #5 } {
+    \prop_gput:Nxx \g_comm_resolved_timestamps_prop { \l_comm_current_thread_hash_tl } { #8 }
+  }
   \tl_set:Nn \l_curr_filter_tl { #9 }
   \bool_set_true:N \l_comm_should_print_bool
   
@@ -1062,7 +1079,7 @@
     \int_set:Nn \l_comm_reply_idx_int { 0 }
     \bool_set_true:N \l_comm_first_reply_bool
     \tl_set:Nx \l_comm_current_thread_hash_tl {
-      \str_mdfive_hash:n {
+      \str_mdfive_hash:e {
         #3 / #5
       }
     }
@@ -1078,7 +1095,9 @@
     }
     \par\vspace{3pt}
     \bool_if:NT \g_comm_timestamps_bool {
-      \hspace*{1.5em}\textbf{Date:}~\texttt{\__comm_render_local_datetime:n { #8 }} \par\vspace{2pt}
+      \tl_if_blank:nF { #5 } {
+        \hspace*{1.5em}\textbf{Date:}~\texttt{\__comm_render_local_datetime:n { #8 }} \par\vspace{2pt}
+      }
     }
     \tl_if_blank:nF { #5 } {
       \hspace*{1.5em}\textbf{Target:}~\texttt{\tl_to_str:n { #5 }} \par\vspace{2pt}
@@ -1105,7 +1124,7 @@
 
 \cs_new_protected:Nn \__comm_write_timestamp:nn {
   \iow_now:Nx \g_comm_timestamps_iow {
-    \exp_not:N \setcommenttimestamp { #1 } { #2 }
+     \exp_not:N \setcommenttimestamp { #1 } { #2 }
   }
 }
 
