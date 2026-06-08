@@ -211,6 +211,18 @@
 %    \begin{macrocode}
 \RequirePackage{expl3}
 \ExplSyntaxOn
+
+% Provide safe fallbacks for commands written to auxiliary files to prevent
+% compilation errors (e.g., when switching between draft and final modes, or
+% when PGF/TikZ system driver does not define \pgfsyspdfmark in draft mode).
+\ExplSyntaxOff
+\providecommand{\pgfsyspdfmark}[3]{}
+\providecommand{\commrecord}[4]{}
+\providecommand{\commreportentry}[8]{}
+\providecommand{\hypertarget}[2]{#2}
+\providecommand{\hyperlink}[2]{#2}
+\ExplSyntaxOn
+
 \bool_new:N \g_comm_final_bool
 \bool_new:N \g_comm_timestamps_bool
 \bool_gset_true:N \g_comm_timestamps_bool
@@ -552,7 +564,7 @@
   \prop_gput:Nnn \g__comm_box_ht_prop { #1 } { #4 }
 }
 
-\NewDocumentCommand{\commrecord}{m m m m}{
+\DeclareDocumentCommand{\commrecord}{m m m m}{
   \__comm_record:nnnn { #1 } { #2 } { #3 } { #4 }
 }
 
@@ -976,7 +988,7 @@
   \seq_gput_right:Nn \g_comm_report_seq { { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 } { #8 } }
 }
 
-\NewDocumentCommand{\commreportentry}{m m m m m m m m}{
+\DeclareDocumentCommand{\commreportentry}{m m m m m m m m}{
   \__comm_add_report_entry:nnnnnnnn { #1 } { #2 } { #3 } { #4 } { #5 } { #6 } { #7 } { #8 }
 }
 
@@ -1008,10 +1020,6 @@
   \__comm_render_note:n { #3 }
   \group_end:
 }
-
-% Fallbacks for hyperref if not loaded
-\providecommand{\hypertarget}[2]{#2}
-\providecommand{\hyperlink}[2]{#2}
 
 % Helper for rendering report entries
 \cs_new_protected:Nn \__comm_render_report_entry:nnnnnnnnn {
