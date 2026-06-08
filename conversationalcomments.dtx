@@ -384,6 +384,12 @@
   \__comm_current_iso_timestamp:
 }
 
+% Helper to pad single-digit numbers with a leading zero
+\cs_new:Npn \__comm_pad_two:n #1 {
+  \int_compare:nNnT { #1 } < { 10 } { 0 }
+  \int_eval:n { #1 }
+}
+
 % Protected helper to parse an ISO-8601 timestamp, convert it to local timezone, and print
 \cs_new_protected:Nn \__comm_render_local_datetime:n {
   \quark_if_no_value:nTF { #1 } {
@@ -392,11 +398,26 @@
     \tl_if_blank:nTF { #1 } {
       [No~Date]
     }{
-      \tl_set:Nn \l_tmpa_tl { #1 }
+      \tl_set:No \l_tmpa_tl { #1 }
       \tl_if_in:NnTF \l_tmpa_tl { T } {
-        \str_range:nnn { #1 } { 1 } { 10 }
+        \exp_args:NnV \DTMsavetimestamp { comm_temp_time } \l_tmpa_tl
+        \DTMtozulu{comm_temp_time}{comm_zulu_time}
+        \DTMsaveaszulutime{comm_local_time}
+          {\DTMfetchyear{comm_zulu_time}}
+          {\DTMfetchmonth{comm_zulu_time}}
+          {\DTMfetchday{comm_zulu_time}}
+          {\DTMfetchhour{comm_zulu_time}}
+          {\DTMfetchminute{comm_zulu_time}}
+          {0}
+          {\int_eval:n { - \g_comm_sys_tz_hour_int }}
+          {\int_use:N \g_comm_sys_tz_minute_int}
+        \DTMfetchyear{comm_local_time} -
+        \__comm_pad_two:n { \DTMfetchmonth{comm_local_time} } -
+        \__comm_pad_two:n { \DTMfetchday{comm_local_time} }
         \c_space_tl
-        \str_range:nnn { #1 } { 12 } { 16 }
+        \__comm_pad_two:n { \DTMfetchhour{comm_local_time} }
+        \c_colon_str
+        \__comm_pad_two:n { \DTMfetchminute{comm_local_time} }
       }{
         \l_tmpa_tl
       }
@@ -429,28 +450,9 @@
     \prop_gput:Nnn \g_comm_loaded_timestamps_prop { #1 } { [No~Date] }
   }{
     \tl_if_in:NnTF \l_tmpa_tl { T } {
-      \DTMsavetimestamp{comm_temp_time}{#2}
-      \DTMtozulu{comm_temp_time}{comm_zulu_time}
-      \DTMsaveaszulutime{comm_local_time}
-        {\DTMfetchyear{comm_zulu_time}}
-        {\DTMfetchmonth{comm_zulu_time}}
-        {\DTMfetchday{comm_zulu_time}}
-        {\DTMfetchhour{comm_zulu_time}}
-        {\DTMfetchminute{comm_zulu_time}}
-        {0}
-        {\g_comm_sys_tz_hour_int}
-        {\g_comm_sys_tz_minute_int}
-      % Generate the clean local formatted string
-      \tl_set:Nx \l_tmpb_tl {
-        \DTMfetchyear{comm_local_time} -
-        \DTMfetchmonth{comm_local_time} -
-        \DTMfetchday{comm_local_time} \c_space_tl
-        \DTMfetchhour{comm_local_time} \c_colon_str
-        \DTMfetchminute{comm_local_time}
-      }
-      \prop_gput:Nno \g_comm_loaded_timestamps_prop { #1 } { \l_tmpb_tl }
-    }{
       \prop_gput:Nnn \g_comm_loaded_timestamps_prop { #1 } { #2 }
+    }{
+      % Discard old format timezone-less timestamps to force regeneration
     }
   }
 }
